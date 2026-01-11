@@ -1,6 +1,6 @@
 # rtb-state2action
 
-Hand recognition pipeline for a local scrcpy window capture. The repository collects hand crops, labels them into 8 classes, trains a lightweight CNN, and streams inference results as an `in_hand` vector suitable for downstream state-to-action models.
+Hand recognition pipeline for a local scrcpy window capture or recorded mp4 input. The repository collects hand crops, labels them into 8 classes, trains a lightweight CNN, and streams inference results as an `in_hand` vector suitable for downstream state-to-action models.
 
 ## Setup
 
@@ -25,6 +25,17 @@ python -m scripts.label_hand_crops --crops-jsonl data/hand_crops.jsonl
 python -m scripts.train_hand_cnn --labels data/hand_labels.jsonl
 python -m scripts.infer_hand --window-title scrcpy_game --model runs/<run_id>/model.pt
 ```
+
+mp4????:
+
+```powershell
+python -m scripts.collect_hand_crops --video samples/scrcpy_001.mp4 --interval-ms 250
+python -m scripts.collect_hand_crops --video samples/scrcpy_001.mp4 --preview
+python -m scripts.infer_hand --video samples/scrcpy_001.mp4 --model runs/<run_id>/model.pt --max-frames 200
+```
+
+Snipping Tool ??? scrcpy ??????????????? ROI ????????????
+`samples/` ? mp4 ?????? Git ???????????`.gitignore` ????
 
 ROIの調整:
 - `y_ratio`: ウィンドウ高さに対するROI開始位置の比率（例: 0.72）
@@ -57,6 +68,7 @@ runs/
 - `HAND_ROI` is defined as the lower portion of the window and split into 4 slots.
 - The ROI includes extra vertical margin to tolerate selected-card lift.
 - All outputs are local-only; image data is not tracked in Git.
+- For `--video`, `--window-title` is ignored and `--interval-ms` does not affect sampling.
 
 ## CLI Details
 
@@ -65,6 +77,14 @@ runs/
 ```powershell
 python -m scripts.collect_hand_crops --window-title scrcpy_game --interval-ms 250 --hand-y-ratio 0.72 --hand-height-ratio 0.26
 ```
+
+Video sampling options:
+
+```powershell
+python -m scripts.collect_hand_crops --video samples/scrcpy_001.mp4 --video-fps 4
+```
+
+`--video-fps` samples frames at the target rate by skipping frames based on their timestamps (`CAP_PROP_POS_MSEC`). If timestamps are unavailable, the sampler falls back to the source fps.
 
 `infer_hand` can append to a JSONL state stream:
 

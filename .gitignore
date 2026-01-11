@@ -6,6 +6,7 @@ __pycache__/
 .pytest_cache/
 data/
 runs/
+samples/*.mp4
 *.log
 *.tmp
 *.DS_Store
