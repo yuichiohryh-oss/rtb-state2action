@@ -1,0 +1,11 @@
+--extra-index-url https://download.pytorch.org/whl/cu128
+torch==2.7.0+cu128
+torchvision==0.22.0+cu128
+numpy==2.2.1
+opencv-python==4.10.0.84
+pillow==11.0.0
+mss==9.0.1
+dxcam==0.0.5
+pywin32==308
+tqdm==4.66.5
+pytest==8.3.4
