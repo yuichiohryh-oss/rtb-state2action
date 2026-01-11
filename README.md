@@ -166,6 +166,12 @@ Train:
 python -m scripts.train_proposal_model --data data/state_role.jsonl --epochs 30 --batch-size 64 --lr 1e-3 --seed 42 --val-split 0.2
 ```
 
+Enable balanced class weights (based on the train split role counts):
+
+```powershell
+python -m scripts.train_proposal_model --data data/state_role.jsonl --epochs 30 --batch-size 64 --lr 1e-3 --seed 42 --val-split 0.2 --class-weight balanced
+```
+
 Artifacts are saved to `runs/YYYYMMDD_HHMMSS_proposal/`:
 
 ```
@@ -222,6 +228,8 @@ Input schema (`state_role.jsonl`):
 Notes:
 - `role` is 1..8 (external I/O keeps 1..8, internal model uses 0..7).
 - v1 uses hand-only state; v2 appends `prev_action_onehot` to reach 16 dims; v3 appends `prev2_action_onehot` to reach 24 dims.
+- `--class-weight balanced` works with v1/v2/v3 datasets and clips weights at 5.0 to avoid extreme values.
+- Tip: if predictions collapse to a single class, try `--class-weight balanced`.
 
 `label_hand_crops` shows key bindings and card mappings in the top-left corner; use `--no-help` to hide them. The fixed deck is the 2.6 hog list:
 - 1: HOG_RIDER

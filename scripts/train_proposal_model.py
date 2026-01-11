@@ -17,6 +17,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--save-best", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--metric", choices=["val_acc", "val_top3"], default="val_acc")
     parser.add_argument("--early-stopping-patience", type=int, default=0)
+    parser.add_argument("--class-weight", choices=["none", "balanced"], default="none")
     return parser
 
 
@@ -50,6 +51,7 @@ def main() -> None:
         save_best=args.save_best,
         metric=args.metric,
         early_stopping_patience=args.early_stopping_patience,
+        class_weight=args.class_weight,
     )
     run_dir = train_proposal_model(config)
     print(f"Saved run to: {run_dir}")
