@@ -151,6 +151,12 @@ def _split_samples(
     return train_samples, val_samples
 
 
+def split_state_role_samples(
+    samples: list[StateRoleSample], val_split: float, seed: int
+) -> tuple[list[StateRoleSample], list[StateRoleSample]]:
+    return _split_samples(samples, val_split, seed)
+
+
 def _run_epoch(
     model: ProposalModel,
     loader: DataLoader,
