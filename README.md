@@ -128,6 +128,15 @@ Output schema (`actions.jsonl`):
 python -m scripts.build_state_role_dataset --hand data/result_full.txt --actions data/actions_full.jsonl --out data/state_role.jsonl --state-offset-ms 1000 --max-gap-ms 1500
 ```
 
+Attach a video stem (mp4 filename without extension) so later splits can group by video:
+
+```powershell
+python -m scripts.build_state_role_dataset --hand data/batch1/result.txt --actions data/batch1/actions.jsonl --out data/state_role_batch1.jsonl --stem batch1
+python -m scripts.build_state_role_dataset --hand data/batch2/result.txt --actions data/batch2/actions.jsonl --out data/state_role_batch2.jsonl --stem batch2
+python -m scripts.build_state_role_dataset --hand data/batch3/result.txt --actions data/batch3/actions.jsonl --out data/state_role_batch3.jsonl --stem batch3
+python -m scripts.build_state_role_dataset --hand data/batch4/result.txt --actions data/batch4/actions.jsonl --out data/state_role_batch4.jsonl --stem batch4
+```
+
 Include history in the state:
 
 ```powershell
@@ -164,6 +173,12 @@ Train:
 
 ```powershell
 python -m scripts.train_proposal_model --data data/state_role.jsonl --epochs 30 --batch-size 64 --lr 1e-3 --seed 42 --val-split 0.2
+```
+
+Train with group split (same stem stays in the same split):
+
+```powershell
+python -m scripts.train_proposal_model --data data/state_role.jsonl --epochs 30 --batch-size 64 --lr 1e-3 --seed 42 --val-split 0.2 --split-mode group
 ```
 
 Enable balanced class weights (based on the train split role counts):
@@ -211,6 +226,18 @@ Evaluate (val split by default, same split seed as training). Use `best_model.pt
 python -m scripts.eval_proposal_model --model runs/<run_id>/best_model.pt --data data/state_role.jsonl --split val --val-split 0.2 --seed 42 --topk 3 --out runs/<run_id>_proposal_eval/metrics.json
 ```
 
+Evaluate with group split (same split mode as training):
+
+```powershell
+python -m scripts.eval_proposal_model --model runs/<run_id>/best_model.pt --data data/state_role.jsonl --split val --val-split 0.2 --seed 42 --split-mode group --topk 3
+```
+
+Evaluate a fixed holdout stem (e.g., batch4):
+
+```powershell
+python -m scripts.eval_proposal_model --model runs/<run_id>/best_model.pt --data data/state_role.jsonl --holdout-stems batch4 --topk 3
+```
+
 Evaluate on all samples (no split) or compare baselines:
 
 ```powershell
@@ -230,6 +257,7 @@ Notes:
 - v1 uses hand-only state; v2 appends `prev_action_onehot` to reach 16 dims; v3 appends `prev2_action_onehot` to reach 24 dims.
 - `--class-weight balanced` works with v1/v2/v3 datasets and clips weights at 5.0 to avoid extreme values.
 - Tip: if predictions collapse to a single class, try `--class-weight balanced`.
+- Recommended workflow: assign `--stem` per batch, train with `--split-mode group` on batches 1-3, then evaluate with `--holdout-stems batch4` to measure generalization.
 
 `label_hand_crops` shows key bindings and card mappings in the top-left corner; use `--no-help` to hide them. The fixed deck is the 2.6 hog list:
 - 1: HOG_RIDER

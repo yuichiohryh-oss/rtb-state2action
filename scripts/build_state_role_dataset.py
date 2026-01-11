@@ -21,6 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--include-debug", action="store_true")
     parser.add_argument("--include-prev-action", action="store_true")
     parser.add_argument("--history", type=int, default=1, choices=range(0, 3))
+    parser.add_argument("--stem")
     return parser
 
 
@@ -33,6 +34,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--max-gap-ms must be non-negative")
     if args.history < 0 or args.history > 2:
         parser.error("--history must be 0..2")
+    if args.stem is not None and not str(args.stem).strip():
+        parser.error("--stem must be non-empty when provided")
     return args
 
 
@@ -86,6 +89,8 @@ def main() -> None:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     with args.out.open("w", encoding="utf-8") as handle:
         for record in records:
+            if args.stem:
+                record["stem"] = args.stem
             handle.write(json.dumps(record, ensure_ascii=True) + "\n")
 
     print(

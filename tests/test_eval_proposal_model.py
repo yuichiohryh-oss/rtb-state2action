@@ -49,6 +49,8 @@ def test_eval_proposal_model_metrics(tmp_path: Path) -> None:
         val_split=0.2,
         seed=123,
         split="val",
+        split_mode="row",
+        holdout_stems=None,
         out_path=None,
     )
     metrics = eval_proposal_model(eval_config)
