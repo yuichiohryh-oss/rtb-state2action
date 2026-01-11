@@ -14,6 +14,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--val-split", type=float, default=0.2)
+    parser.add_argument("--save-best", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--metric", choices=["val_acc", "val_top3"], default="val_acc")
+    parser.add_argument("--early-stopping-patience", type=int, default=0)
     return parser
 
 
@@ -30,6 +33,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--lr must be positive")
     if args.val_split <= 0 or args.val_split >= 1:
         parser.error("--val-split must be between 0 and 1")
+    if args.early_stopping_patience < 0:
+        parser.error("--early-stopping-patience must be >= 0")
     return args
 
 
@@ -42,6 +47,9 @@ def main() -> None:
         lr=args.lr,
         seed=args.seed,
         val_split=args.val_split,
+        save_best=args.save_best,
+        metric=args.metric,
+        early_stopping_patience=args.early_stopping_patience,
     )
     run_dir = train_proposal_model(config)
     print(f"Saved run to: {run_dir}")

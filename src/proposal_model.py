@@ -163,6 +163,9 @@ class TrainConfig:
     run_root: Path = Path("runs")
     hidden_dim: int = 32
     dropout: float = 0.1
+    save_best: bool = True
+    metric: str = "val_acc"
+    early_stopping_patience: int = 0
 
 
 def seed_everything(seed: int) -> None:
@@ -264,10 +267,24 @@ def _run_epoch(
     }
 
 
+def _checkpoint_payload(model: ProposalModel, input_dim: int, config: TrainConfig) -> dict[str, object]:
+    return {
+        "model_state": model.state_dict(),
+        "input_dim": input_dim,
+        "hidden_dim": config.hidden_dim,
+        "dropout": config.dropout,
+        "num_classes": 8,
+    }
+
+
 def train_proposal_model(config: TrainConfig) -> Path:
     samples = load_state_role_samples(config.data_path)
     if not samples:
         raise RuntimeError("No samples found in state_role dataset")
+    if config.metric not in ("val_acc", "val_top3"):
+        raise ValueError("metric must be 'val_acc' or 'val_top3'")
+    if config.early_stopping_patience < 0:
+        raise ValueError("early_stopping_patience must be >= 0")
 
     seed_everything(config.seed)
     input_dim = resolve_input_dim(samples)
@@ -305,6 +322,17 @@ def train_proposal_model(config: TrainConfig) -> Path:
         sep=" ",
     )
 
+    run_id = time.strftime("%Y%m%d_%H%M%S")
+    run_dir = config.run_root / f"{run_id}_proposal"
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    best_metric = float("-inf")
+    best_epoch = 0
+    best_val_acc = 0.0
+    best_val_top3 = 0.0
+    epochs_since_improve = 0
+    metric_key = "accuracy" if config.metric == "val_acc" else "top3_accuracy"
+
     train_metrics = {}
     val_metrics = {}
     for epoch in range(config.epochs):
@@ -319,19 +347,33 @@ def train_proposal_model(config: TrainConfig) -> Path:
             f"val_top3={val_metrics['top3_accuracy']:.4f}"
         )
 
-    run_id = time.strftime("%Y%m%d_%H%M%S")
-    run_dir = config.run_root / f"{run_id}_proposal"
-    run_dir.mkdir(parents=True, exist_ok=True)
+        current_metric = val_metrics[metric_key]
+        if current_metric > best_metric:
+            best_metric = current_metric
+            best_epoch = epoch + 1
+            best_val_acc = val_metrics["accuracy"]
+            best_val_top3 = val_metrics["top3_accuracy"]
+            epochs_since_improve = 0
+            if config.save_best:
+                best_model_path = run_dir / "best_model.pt"
+                torch.save(_checkpoint_payload(model, input_dim, config), best_model_path)
+            print(
+                "best updated:",
+                f"epoch={epoch + 1}",
+                f"val_acc={val_metrics['accuracy']:.4f}",
+                f"val_top3={val_metrics['top3_accuracy']:.4f}",
+            )
+        else:
+            epochs_since_improve += 1
+            if config.early_stopping_patience > 0 and epochs_since_improve >= config.early_stopping_patience:
+                print(
+                    f"early stopping: no improvement for {config.early_stopping_patience} epochs"
+                )
+                break
 
     model_path = run_dir / "model.pt"
     torch.save(
-        {
-            "model_state": model.state_dict(),
-            "input_dim": input_dim,
-            "hidden_dim": config.hidden_dim,
-            "dropout": config.dropout,
-            "num_classes": 8,
-        },
+        _checkpoint_payload(model, input_dim, config),
         model_path,
     )
 
@@ -345,6 +387,9 @@ def train_proposal_model(config: TrainConfig) -> Path:
         "val_split": config.val_split,
         "hidden_dim": config.hidden_dim,
         "dropout": config.dropout,
+        "save_best": config.save_best,
+        "metric": config.metric,
+        "early_stopping_patience": config.early_stopping_patience,
     }
     config_path.write_text(json.dumps(config_payload, indent=2), encoding="utf-8")
 
@@ -354,6 +399,13 @@ def train_proposal_model(config: TrainConfig) -> Path:
         "val": val_metrics,
         "num_train": len(train_samples),
         "num_val": len(val_samples),
+        "final_train_acc": train_metrics.get("accuracy", 0.0),
+        "final_val_acc": val_metrics.get("accuracy", 0.0),
+        "final_val_top3": val_metrics.get("top3_accuracy", 0.0),
+        "best_epoch": best_epoch,
+        "best_val_acc": best_val_acc,
+        "best_val_top3": best_val_top3,
+        "best_metric_name": config.metric,
     }
     metrics_path.write_text(json.dumps(metrics_payload, indent=2), encoding="utf-8")
 
