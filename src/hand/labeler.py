@@ -12,6 +12,7 @@ import cv2
 class LabelerConfig:
     crops_jsonl: Path
     output_jsonl: Path = Path("data/hand_labels.jsonl")
+    show_help: bool = True
     class_names: Tuple[str, ...] = (
         "CARD_1",
         "CARD_2",
@@ -22,6 +23,58 @@ class LabelerConfig:
         "CARD_7",
         "CARD_8",
     )
+
+
+_HELP_LINES = (
+    "1-8 : assign card",
+    "n   : skip",
+    "b   : back",
+    "q   : quit",
+    "",
+    "1 GOLEM",
+    "2 NIGHT_WITCH",
+    "3 BABY_DRAGON",
+    "4 ELECTRO_DRAGON",
+    "5 MEGA_MINION",
+    "6 LIGHTNING",
+    "7 TORNADO",
+    "8 BARB_BARREL",
+)
+
+
+def _draw_help_overlay(image) -> None:
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.6
+    text_thickness = 1
+    outline_thickness = 3
+    x = 10
+    y = 55
+    (_, text_height), baseline = cv2.getTextSize("Ag", font, font_scale, text_thickness)
+    line_height = text_height + baseline + 6
+
+    for line in _HELP_LINES:
+        if line:
+            cv2.putText(
+                image,
+                line,
+                (x, y),
+                font,
+                font_scale,
+                (0, 0, 0),
+                outline_thickness,
+                cv2.LINE_AA,
+            )
+            cv2.putText(
+                image,
+                line,
+                (x, y),
+                font,
+                font_scale,
+                (255, 255, 255),
+                text_thickness,
+                cv2.LINE_AA,
+            )
+        y += line_height
 
 
 def _load_paths(crops_jsonl: Path) -> List[str]:
@@ -76,6 +129,8 @@ def label_crops(config: LabelerConfig) -> None:
                 2,
                 cv2.LINE_AA,
             )
+            if config.show_help:
+                _draw_help_overlay(display)
             cv2.imshow("hand_labeler", display)
             key = cv2.waitKey(0) & 0xFF
 
