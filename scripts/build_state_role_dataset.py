@@ -19,6 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--state-offset-ms", type=int, default=1000)
     parser.add_argument("--max-gap-ms", type=int, default=1500)
     parser.add_argument("--include-debug", action="store_true")
+    parser.add_argument("--include-prev-action", action="store_true")
     return parser
 
 
@@ -75,6 +76,7 @@ def main() -> None:
         state_offset_ms=args.state_offset_ms,
         max_gap_ms=args.max_gap_ms,
         include_debug=args.include_debug,
+        include_prev_action=args.include_prev_action,
     )
 
     args.out.parent.mkdir(parents=True, exist_ok=True)

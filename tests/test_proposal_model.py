@@ -46,6 +46,7 @@ def test_proposal_dataset_shape() -> None:
     dataset = ProposalDataset(samples)
     features, label = dataset[0]
     assert isinstance(features, torch.Tensor)
+    assert dataset.input_dim == 8
     assert features.shape == (8,)
     assert label == 0
 
