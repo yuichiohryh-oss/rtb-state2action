@@ -11,7 +11,7 @@ from PIL import Image
 from torchvision import transforms
 
 from src.capture.frame_source import FrameSource, VideoFrameSource, WindowFrameSource
-from src.capture.roi import RoiParams
+from src.capture.roi import RoiParams, compute_hand_roi
 from src.hand.model import build_model
 from src.hand.frame_slots import iter_hand_slots
 from src.state.state_writer import append_state
@@ -87,21 +87,36 @@ def _order_in_hand(in_hand: Dict[str, int], class_names: List[str]) -> Dict[str,
     return ordered
 
 
-def infer_loop(config: InferConfig) -> None:
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model, class_names = _load_model(config.model_path, device)
-    frame_source = _build_frame_source(config)
-
+def _log_start(config: InferConfig, window_w: int, window_h: int) -> None:
+    roi = compute_hand_roi(window_w, window_h, config.roi_params)
     print(
         "infer_hand start:",
+        f"window_rect=({window_w},{window_h})",
+        "HAND_ROI="
+        f"y_ratio={config.roi_params.y_ratio:.3f},"
+        f"height_ratio={config.roi_params.height_ratio:.3f},"
+        f"x_margin_ratio={config.roi_params.x_margin_ratio:.3f},"
+        f"x_offset_ratio={config.roi_params.x_offset_ratio:.3f}",
+        f"roi_px={roi}",
         f"image_size={config.image_size}",
         f"smoothing={config.smoothing}",
         sep=" ",
     )
 
+
+def infer_loop(config: InferConfig) -> None:
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model, class_names = _load_model(config.model_path, device)
+    frame_source = _build_frame_source(config)
+
     history: List[List[Tuple[int, float]]] = [[] for _ in range(4)]
+    started = False
 
     for frame_slots in iter_hand_slots(frame_source, config.roi_params, config.max_frames):
+        if not started:
+            window_h, window_w = frame_slots.frame.shape[:2]
+            _log_start(config, window_w, window_h)
+            started = True
         slot_preds: List[int] = []
 
         for slot_idx, (x1, y1, x2, y2) in enumerate(frame_slots.slots):

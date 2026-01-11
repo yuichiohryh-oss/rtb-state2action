@@ -33,7 +33,11 @@ def _log_start(config: CollectorConfig, window_w: int, window_h: int, session_di
         "collect_hand_crops start:",
         f"source={source_label}",
         f"window_rect=({window_w},{window_h})",
-        f"HAND_ROI=y_ratio={config.roi_params.y_ratio:.3f},height_ratio={config.roi_params.height_ratio:.3f},x_margin_ratio={config.roi_params.x_margin_ratio:.3f}",
+        "HAND_ROI="
+        f"y_ratio={config.roi_params.y_ratio:.3f},"
+        f"height_ratio={config.roi_params.height_ratio:.3f},"
+        f"x_margin_ratio={config.roi_params.x_margin_ratio:.3f},"
+        f"x_offset_ratio={config.roi_params.x_offset_ratio:.3f}",
         f"interval_ms={config.interval_ms}",
         f"video_fps={config.video_fps}",
         f"output_dir={session_dir}",
@@ -113,6 +117,7 @@ def collect_hand_crops(config: CollectorConfig) -> None:
                             "y_ratio": config.roi_params.y_ratio,
                             "height_ratio": config.roi_params.height_ratio,
                             "x_margin_ratio": config.roi_params.x_margin_ratio,
+                            "x_offset_ratio": config.roi_params.x_offset_ratio,
                         },
                     }
                     meta_fp.write(json.dumps(record) + "\n")

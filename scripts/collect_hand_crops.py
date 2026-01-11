@@ -19,6 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--y-ratio", type=float, default=0.72, help="Deprecated: use --hand-y-ratio")
     parser.add_argument("--height-ratio", type=float, default=0.26, help="Deprecated: use --hand-height-ratio")
     parser.add_argument("--x-margin-ratio", type=float, default=0.02)
+    parser.add_argument("--x-offset-ratio", type=float, default=0.0)
     parser.add_argument("--preview", action="store_true", help="Show ROI preview window without saving images (q to quit).")
     return parser
 
@@ -44,6 +45,7 @@ def main() -> None:
         y_ratio=y_ratio,
         height_ratio=height_ratio,
         x_margin_ratio=args.x_margin_ratio,
+        x_offset_ratio=args.x_offset_ratio,
     )
     config = CollectorConfig(
         window_title=args.window_title,

@@ -40,6 +40,15 @@ Snipping Tool ??? scrcpy ??????????????? ROI ????????????
 ROIの調整:
 - `y_ratio`: ウィンドウ高さに対するROI開始位置の比率（例: 0.72）
 - `height_ratio`: ウィンドウ高さに対するROIの高さ比率（例: 0.26）
+- `x_margin_ratio`: ウィンドウ幅に対して左右からカットする比率
+- `x_offset_ratio`: ウィンドウ幅に対する比率でROIを左右にシフト（+は右、-は左）
+- slot3が切れるときは x_offset を正方向に調整する
+
+推奨例:
+
+```powershell
+python -m scripts.collect_hand_crops --window-title scrcpy_game --interval-ms 250 --hand-y-ratio 0.75 --hand-height-ratio 0.33 --x-margin-ratio 0.18 --x-offset-ratio 0.04
+```
 
 プレビュー確認（保存なし、`q`で終了）:
 

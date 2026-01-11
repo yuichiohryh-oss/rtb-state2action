@@ -22,6 +22,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--y-ratio", type=float, default=0.72)
     parser.add_argument("--height-ratio", type=float, default=0.26)
     parser.add_argument("--x-margin-ratio", type=float, default=0.02)
+    parser.add_argument("--x-offset-ratio", type=float, default=0.0)
     return parser
 
 
@@ -44,6 +45,7 @@ def main() -> None:
         y_ratio=args.y_ratio,
         height_ratio=args.height_ratio,
         x_margin_ratio=args.x_margin_ratio,
+        x_offset_ratio=args.x_offset_ratio,
     )
     config = InferConfig(
         window_title=args.window_title,
