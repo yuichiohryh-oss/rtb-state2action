@@ -12,6 +12,7 @@ from torchvision import transforms
 
 from src.capture.frame_source import FrameSource, VideoFrameSource, WindowFrameSource
 from src.capture.roi import RoiParams, compute_hand_roi
+from src.constants.cards_26hog import CARD_ORDER
 from src.hand.model import build_model
 from src.hand.frame_slots import iter_hand_slots
 from src.state.state_writer import append_state
@@ -82,7 +83,11 @@ def _card_sort_key(name: str) -> Tuple[int, int | str]:
 
 def _order_in_hand(in_hand: Dict[str, int], class_names: List[str]) -> Dict[str, int]:
     ordered: Dict[str, int] = {}
-    for name in sorted(class_names, key=_card_sort_key):
+    if set(class_names) == set(CARD_ORDER):
+        ordered_names = [name for name in CARD_ORDER if name in class_names]
+    else:
+        ordered_names = sorted(class_names, key=_card_sort_key)
+    for name in ordered_names:
         ordered[name] = in_hand.get(name, 0)
     return ordered
 

@@ -7,6 +7,7 @@ from typing import Dict, List, Tuple
 
 import cv2
 
+from src.constants.cards_26hog import CARD_LABELS
 
 @dataclass
 class LabelerConfig:
@@ -25,21 +26,20 @@ class LabelerConfig:
     )
 
 
-_HELP_LINES = (
-    "1-8 : assign card",
-    "n   : skip",
-    "b   : back",
-    "q   : quit",
-    "",
-    "1 GOLEM",
-    "2 NIGHT_WITCH",
-    "3 BABY_DRAGON",
-    "4 ELECTRO_DRAGON",
-    "5 MEGA_MINION",
-    "6 LIGHTNING",
-    "7 TORNADO",
-    "8 BARB_BARREL",
-)
+def _build_help_lines() -> Tuple[str, ...]:
+    lines = [
+        "1-8 : assign card",
+        "n   : skip",
+        "b   : back",
+        "q   : quit",
+        "",
+    ]
+    for idx in sorted(CARD_LABELS):
+        lines.append(f"{idx} {CARD_LABELS[idx]}")
+    return tuple(lines)
+
+
+_HELP_LINES = _build_help_lines()
 
 
 def _draw_help_overlay(image) -> None:
