@@ -101,6 +101,27 @@ python -m scripts.collect_hand_crops --video samples/scrcpy_001.mp4 --video-fps 
 python -m scripts.infer_hand --window-title scrcpy_game --model runs/<run_id>/model.pt --state-out data/state_stream.jsonl
 ```
 
+PowerShell redirect examples (stdout -> file):
+
+```powershell
+python -m scripts.infer_hand --window-title scrcpy_game --model runs/<run_id>/model.pt | Out-File -FilePath data/infer_hand.txt
+```
+
+`Out-File` produces UTF-16LE by default; the extractor handles UTF-8/UTF-16LE inputs.
+
+`extract_actions_from_hand` converts the JSONL stream into action events:
+
+```powershell
+python -m scripts.extract_actions_from_hand --in data/infer_hand.txt --out data/actions.jsonl
+python -m scripts.extract_actions_from_hand --in - --out data/actions.jsonl
+```
+
+Output schema (`actions.jsonl`):
+
+```json
+{"t_ms": 1000, "card_id": 1, "event": "play", "confidence": 0.8, "hand_before": [1, 2, 3, 4], "hand_after": [2, 3, 4, 5], "notes": "confirm=2 pre_hold=2/2 invalid_window=0"}
+```
+
 `label_hand_crops` shows key bindings and card mappings in the top-left corner; use `--no-help` to hide them. The fixed deck is the 2.6 hog list:
 - 1: HOG_RIDER
 - 2: MUSKETEER
