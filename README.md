@@ -168,6 +168,20 @@ Infer from `state_role.jsonl` (first N samples):
 python -m scripts.infer_proposal_model --model runs/<run_id>/model.pt --from-state-role data/state_role.jsonl --n 20 --topk 3
 ```
 
+Evaluate (val split by default, same split seed as training):
+
+```powershell
+python -m scripts.eval_proposal_model --model runs/<run_id>/model.pt --data data/state_role.jsonl --split val --val-split 0.2 --seed 42 --topk 3 --out runs/<run_id>_proposal_eval/metrics.json
+```
+
+Evaluate on all samples (no split) or compare baselines:
+
+```powershell
+python -m scripts.eval_proposal_model --model runs/<run_id>/model.pt --data data/state_role.jsonl --split all --topk 3
+python -m scripts.eval_proposal_model --data data/state_role.jsonl --baseline mostfreq --split val --val-split 0.2 --seed 42
+python -m scripts.eval_proposal_model --data data/state_role.jsonl --baseline random --split val --val-split 0.2 --seed 42
+```
+
 Input schema (`state_role.jsonl`):
 
 ```json
