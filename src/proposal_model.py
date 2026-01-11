@@ -21,6 +21,7 @@ class StateRoleSample:
     role: int  # 1..8
     prev_action_onehot: list[float] | None = None
     prev2_action_onehot: list[float] | None = None
+    stem: str | None = None
 
     def features(self) -> list[float]:
         if self.prev_action_onehot is None:
@@ -100,6 +101,15 @@ def parse_state_role_lines(lines: Iterable[str], source: str) -> list[StateRoleS
             raise ValueError(f"missing keys at {source}:{idx}")
         in_hand = payload["in_hand_state"]
         role = payload["role"]
+        stem_value: str | None = None
+        if "stem" in payload:
+            stem = payload["stem"]
+            if not isinstance(stem, str):
+                raise ValueError(f"stem must be str at {source}:{idx}")
+            stem = stem.strip()
+            if not stem:
+                raise ValueError(f"stem must be non-empty at {source}:{idx}")
+            stem_value = stem
         if not isinstance(in_hand, list):
             raise ValueError(f"in_hand_state must be list at {source}:{idx}")
         in_hand_floats = _validate_in_hand_state(in_hand, source, idx)
@@ -140,6 +150,7 @@ def parse_state_role_lines(lines: Iterable[str], source: str) -> list[StateRoleS
                 role=role_id,
                 prev_action_onehot=prev_onehot,
                 prev2_action_onehot=prev2_onehot,
+                stem=stem_value,
             )
         )
     return samples
@@ -199,6 +210,7 @@ class TrainConfig:
     metric: str = "val_acc"
     early_stopping_patience: int = 0
     class_weight: str = "none"
+    split_mode: str = "row"
 
 
 def seed_everything(seed: int) -> None:
@@ -238,6 +250,37 @@ def _split_samples(
     return train_samples, val_samples
 
 
+def _split_samples_group(
+    samples: list[StateRoleSample], val_split: float, seed: int
+) -> tuple[list[StateRoleSample], list[StateRoleSample]]:
+    if len(samples) < 2:
+        raise RuntimeError("Need at least 2 samples for train/val split")
+    group_ids: list[str] = []
+    seen: set[str] = set()
+    for sample in samples:
+        if sample.stem is None:
+            raise ValueError("group split requires stem for all samples")
+        if sample.stem not in seen:
+            seen.add(sample.stem)
+            group_ids.append(sample.stem)
+    if len(group_ids) < 2:
+        raise RuntimeError("Need at least 2 stems for group split")
+    rng = random.Random(seed)
+    rng.shuffle(group_ids)
+    val_group_count = max(1, int(len(group_ids) * val_split))
+    if len(group_ids) - val_group_count < 1:
+        val_group_count = len(group_ids) - 1
+    val_groups = set(group_ids[:val_group_count])
+    train_samples: list[StateRoleSample] = []
+    val_samples: list[StateRoleSample] = []
+    for sample in samples:
+        if sample.stem in val_groups:
+            val_samples.append(sample)
+        else:
+            train_samples.append(sample)
+    return train_samples, val_samples
+
+
 def resolve_input_dim(samples: Sequence[StateRoleSample]) -> int:
     if not samples:
         return 0
@@ -249,9 +292,16 @@ def resolve_input_dim(samples: Sequence[StateRoleSample]) -> int:
 
 
 def split_state_role_samples(
-    samples: list[StateRoleSample], val_split: float, seed: int
+    samples: list[StateRoleSample],
+    val_split: float,
+    seed: int,
+    split_mode: str = "row",
 ) -> tuple[list[StateRoleSample], list[StateRoleSample]]:
-    return _split_samples(samples, val_split, seed)
+    if split_mode == "row":
+        return _split_samples(samples, val_split, seed)
+    if split_mode == "group":
+        return _split_samples_group(samples, val_split, seed)
+    raise ValueError(f"split_mode must be row or group, got: {split_mode}")
 
 
 def _class_distribution(samples: Sequence[StateRoleSample], num_classes: int = 8) -> list[int]:
@@ -342,11 +392,15 @@ def train_proposal_model(config: TrainConfig) -> Path:
         raise ValueError("early_stopping_patience must be >= 0")
     if config.class_weight not in ("none", "balanced"):
         raise ValueError("class_weight must be 'none' or 'balanced'")
+    if config.split_mode not in ("row", "group"):
+        raise ValueError("split_mode must be 'row' or 'group'")
 
     seed_everything(config.seed)
     input_dim = resolve_input_dim(samples)
 
-    train_samples, val_samples = _split_samples(samples, config.val_split, config.seed)
+    train_samples, val_samples = split_state_role_samples(
+        samples, config.val_split, config.seed, split_mode=config.split_mode
+    )
     train_loader = DataLoader(
         ProposalDataset(train_samples),
         batch_size=config.batch_size,
@@ -388,6 +442,7 @@ def train_proposal_model(config: TrainConfig) -> Path:
         f"epochs={config.epochs}",
         f"lr={config.lr}",
         f"val_split={config.val_split}",
+        f"split_mode={config.split_mode}",
         f"seed={config.seed}",
         sep=" ",
     )
@@ -461,6 +516,7 @@ def train_proposal_model(config: TrainConfig) -> Path:
         "metric": config.metric,
         "early_stopping_patience": config.early_stopping_patience,
         "class_weight": config.class_weight,
+        "split_mode": config.split_mode,
     }
     config_path.write_text(json.dumps(config_payload, indent=2), encoding="utf-8")
 

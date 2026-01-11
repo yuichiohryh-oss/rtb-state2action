@@ -14,6 +14,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--val-split", type=float, default=0.2)
+    parser.add_argument("--split-mode", choices=["row", "group"], default="row")
     parser.add_argument("--save-best", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--metric", choices=["val_acc", "val_top3"], default="val_acc")
     parser.add_argument("--early-stopping-patience", type=int, default=0)
@@ -48,6 +49,7 @@ def main() -> None:
         lr=args.lr,
         seed=args.seed,
         val_split=args.val_split,
+        split_mode=args.split_mode,
         save_best=args.save_best,
         metric=args.metric,
         early_stopping_patience=args.early_stopping_patience,

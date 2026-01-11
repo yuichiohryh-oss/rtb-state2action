@@ -25,6 +25,8 @@ class EvalConfig:
     val_split: float
     seed: int
     split: str
+    split_mode: str
+    holdout_stems: list[str] | None
     out_path: Path | None
 
 
@@ -49,17 +51,33 @@ def _resolve_eval_samples(
     seed: int,
     split: str,
     require_split: bool,
+    require_train: bool,
+    split_mode: str,
+    holdout_stems: list[str] | None,
 ) -> tuple[list[StateRoleSample], list[StateRoleSample], list[StateRoleSample]]:
-    if split not in {"all", "train", "val"}:
-        raise ValueError(f"split must be one of all/train/val, got: {split}")
+    if split not in {"all", "train", "val", "holdout"}:
+        raise ValueError(f"split must be one of all/train/val/holdout, got: {split}")
+    if holdout_stems:
+        holdout_set = set(holdout_stems)
+        eval_samples = [sample for sample in samples if sample.stem in holdout_set]
+        train_samples = [sample for sample in samples if sample.stem not in holdout_set]
+        if not eval_samples:
+            raise RuntimeError("No samples found for holdout stems")
+        if require_train and not train_samples:
+            raise RuntimeError("No training samples available outside holdout stems")
+        return eval_samples, train_samples, eval_samples
     if split == "all" and not require_split:
         return samples, samples, samples
-    train_samples, val_samples = split_state_role_samples(samples, val_split, seed)
+    train_samples, val_samples = split_state_role_samples(
+        samples, val_split, seed, split_mode=split_mode
+    )
     if split == "all":
         return samples, train_samples, val_samples
     if split == "train":
         return train_samples, train_samples, val_samples
-    return val_samples, train_samples, val_samples
+    if split == "val":
+        return val_samples, train_samples, val_samples
+    raise RuntimeError("holdout split requires --holdout-stems")
 
 
 def _compute_confusion_matrix(
@@ -221,15 +239,19 @@ def _print_summary(
     metrics: dict[str, object],
     total: int,
     split: str,
+    split_mode: str,
+    holdout_stems: list[str] | None,
     baseline: str,
     topk: int,
     model_path: Path | None,
     extra: str | None = None,
 ) -> None:
     print("eval_proposal_model summary:")
-    print(f"split={split} total={total} baseline={baseline}")
+    print(f"split={split} total={total} baseline={baseline} split_mode={split_mode}")
     if model_path is not None:
         print(f"model={model_path}")
+    if holdout_stems:
+        print(f"holdout_stems={','.join(holdout_stems)}")
     if extra:
         print(extra)
     print(f"accuracy_top1={metrics['accuracy_top1']:.4f}")
@@ -249,7 +271,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--baseline", choices=["none", "mostfreq", "random"], default="none")
     parser.add_argument("--val-split", type=float, default=0.2)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--split", choices=["all", "train", "val"], default="val")
+    parser.add_argument("--split", choices=["all", "train", "val", "holdout"], default="val")
+    parser.add_argument("--split-mode", choices=["row", "group"], default="row")
+    parser.add_argument("--holdout-stems")
     parser.add_argument("--out", type=Path)
     return parser
 
@@ -268,6 +292,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--topk must be positive")
     if args.val_split <= 0 or args.val_split >= 1:
         parser.error("--val-split must be between 0 and 1")
+    if args.holdout_stems:
+        stems = [item.strip() for item in args.holdout_stems.split(",")]
+        stems = [stem for stem in stems if stem]
+        if not stems:
+            parser.error("--holdout-stems must include at least one stem")
+        args.holdout_stems = stems
+        if args.split != "holdout":
+            args.split = "holdout"
+    elif args.split == "holdout":
+        parser.error("--split holdout requires --holdout-stems")
     return args
 
 
@@ -277,8 +311,16 @@ def eval_proposal_model(config: EvalConfig) -> dict[str, object]:
         raise RuntimeError("No samples found in state_role dataset")
 
     require_split = config.baseline == "mostfreq" or config.split != "all"
+    require_train = config.baseline == "mostfreq"
     eval_samples, train_samples, _ = _resolve_eval_samples(
-        samples, config.val_split, config.seed, config.split, require_split
+        samples,
+        config.val_split,
+        config.seed,
+        config.split,
+        require_split,
+        require_train,
+        config.split_mode,
+        config.holdout_stems,
     )
     if not eval_samples:
         raise RuntimeError(f"No samples available for split: {config.split}")
@@ -320,6 +362,8 @@ def eval_proposal_model(config: EvalConfig) -> dict[str, object]:
         metrics,
         total=len(eval_samples),
         split=config.split,
+        split_mode=config.split_mode,
+        holdout_stems=config.holdout_stems,
         baseline=config.baseline,
         topk=config.topk,
         model_path=config.model_path,
@@ -335,6 +379,8 @@ def eval_proposal_model(config: EvalConfig) -> dict[str, object]:
             "topk": config.topk,
             "seed": config.seed,
             "val_split": config.val_split,
+            "split_mode": config.split_mode,
+            "holdout_stems": config.holdout_stems,
             "total": len(eval_samples),
             "metrics": metrics,
         }
@@ -354,6 +400,8 @@ def main() -> None:
         val_split=args.val_split,
         seed=args.seed,
         split=args.split,
+        split_mode=args.split_mode,
+        holdout_stems=args.holdout_stems,
         out_path=args.out,
     )
     eval_proposal_model(config)
