@@ -32,10 +32,13 @@ def _load_model(path: Path) -> ProposalModel:
     if not path.exists():
         raise FileNotFoundError(f"model not found: {path}")
     checkpoint = torch.load(path, map_location="cpu")
+    input_dim = int(checkpoint.get("input_dim", 8))
     hidden_dim = int(checkpoint.get("hidden_dim", 32))
     dropout = float(checkpoint.get("dropout", 0.1))
     num_classes = int(checkpoint.get("num_classes", 8))
-    model = ProposalModel(hidden_dim=hidden_dim, dropout=dropout, num_classes=num_classes)
+    model = ProposalModel(
+        input_dim=input_dim, hidden_dim=hidden_dim, dropout=dropout, num_classes=num_classes
+    )
     model.load_state_dict(checkpoint["model_state"])
     return model
 
@@ -123,11 +126,15 @@ def _predict_model(
     pred_topk: list[list[int]] = []
     if not samples:
         return pred_top1, pred_topk
+    expected_dim = model.net[0].in_features
     batch_size = 128
     with torch.no_grad():
         for start in range(0, len(samples), batch_size):
             batch = samples[start : start + batch_size]
-            features = torch.tensor([sample.in_hand for sample in batch], dtype=torch.float32).to(device)
+            features_list = [sample.features() for sample in batch]
+            if any(len(row) != expected_dim for row in features_list):
+                raise RuntimeError(f"input length mismatch for model input_dim {expected_dim}")
+            features = torch.tensor(features_list, dtype=torch.float32).to(device)
             logits = model(features)
             probs = torch.softmax(logits, dim=1)
             k = min(topk, probs.size(1))

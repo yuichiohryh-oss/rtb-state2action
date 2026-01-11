@@ -19,6 +19,12 @@ from src.hand_actions import read_text_lines
 class StateRoleSample:
     in_hand: list[float]
     role: int  # 1..8
+    prev_action_onehot: list[float] | None = None
+
+    def features(self) -> list[float]:
+        if self.prev_action_onehot is None:
+            return self.in_hand
+        return self.in_hand + self.prev_action_onehot
 
 
 def _validate_in_hand_state(values: list[int], source: str, line_no: int) -> list[float]:
@@ -42,6 +48,34 @@ def _validate_role(role: int, source: str, line_no: int) -> int:
     return role
 
 
+def _validate_prev_action(prev_action: int, source: str, line_no: int) -> int:
+    if not isinstance(prev_action, int):
+        raise ValueError(f"prev_action must be int at {source}:{line_no}")
+    if prev_action < 0 or prev_action > 8:
+        raise ValueError(f"prev_action must be 0..8 at {source}:{line_no}")
+    return prev_action
+
+
+def _prev_action_onehot(prev_action: int) -> list[float]:
+    values = [0.0 for _ in range(8)]
+    if prev_action > 0:
+        values[prev_action - 1] = 1.0
+    return values
+
+
+def _validate_prev_action_onehot(values: list[int], source: str, line_no: int) -> list[float]:
+    if len(values) != 8:
+        raise ValueError(f"prev_action_onehot must have length 8 at {source}:{line_no}")
+    floats: list[float] = []
+    for idx, value in enumerate(values, start=1):
+        if not isinstance(value, int):
+            raise ValueError(f"prev_action_onehot[{idx}] must be int at {source}:{line_no}")
+        if value not in (0, 1):
+            raise ValueError(f"prev_action_onehot[{idx}] must be 0 or 1 at {source}:{line_no}")
+        floats.append(float(value))
+    return floats
+
+
 def parse_state_role_lines(lines: Iterable[str], source: str) -> list[StateRoleSample]:
     samples: list[StateRoleSample] = []
     for idx, line in enumerate(lines, start=1):
@@ -62,7 +96,23 @@ def parse_state_role_lines(lines: Iterable[str], source: str) -> list[StateRoleS
             raise ValueError(f"in_hand_state must be list at {source}:{idx}")
         in_hand_floats = _validate_in_hand_state(in_hand, source, idx)
         role_id = _validate_role(role, source, idx)
-        samples.append(StateRoleSample(in_hand=in_hand_floats, role=role_id))
+        prev_onehot: list[float] | None = None
+        if "prev_action_onehot" in payload:
+            prev_raw = payload["prev_action_onehot"]
+            if not isinstance(prev_raw, list):
+                raise ValueError(f"prev_action_onehot must be list at {source}:{idx}")
+            prev_onehot = _validate_prev_action_onehot(prev_raw, source, idx)
+        if "prev_action" in payload:
+            prev_action = _validate_prev_action(payload["prev_action"], source, idx)
+            if prev_onehot is None:
+                prev_onehot = _prev_action_onehot(prev_action)
+            else:
+                expected = _prev_action_onehot(prev_action)
+                if prev_onehot != expected:
+                    raise ValueError(f"prev_action_onehot mismatch at {source}:{idx}")
+        samples.append(
+            StateRoleSample(in_hand=in_hand_floats, role=role_id, prev_action_onehot=prev_onehot)
+        )
     return samples
 
 
@@ -76,13 +126,14 @@ def load_state_role_samples(path: Path) -> list[StateRoleSample]:
 class ProposalDataset(Dataset):
     def __init__(self, samples: Sequence[StateRoleSample]):
         self.samples = list(samples)
+        self.input_dim = resolve_input_dim(self.samples)
 
     def __len__(self) -> int:
         return len(self.samples)
 
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, int]:
         sample = self.samples[idx]
-        features = torch.tensor(sample.in_hand, dtype=torch.float32)
+        features = torch.tensor(sample.features(), dtype=torch.float32)
         label = sample.role - 1
         return features, label
 
@@ -151,6 +202,16 @@ def _split_samples(
     return train_samples, val_samples
 
 
+def resolve_input_dim(samples: Sequence[StateRoleSample]) -> int:
+    if not samples:
+        return 0
+    expected = len(samples[0].features())
+    for idx, sample in enumerate(samples, start=1):
+        if len(sample.features()) != expected:
+            raise ValueError(f"inconsistent feature length at sample {idx}")
+    return expected
+
+
 def split_state_role_samples(
     samples: list[StateRoleSample], val_split: float, seed: int
 ) -> tuple[list[StateRoleSample], list[StateRoleSample]]:
@@ -209,6 +270,7 @@ def train_proposal_model(config: TrainConfig) -> Path:
         raise RuntimeError("No samples found in state_role dataset")
 
     seed_everything(config.seed)
+    input_dim = resolve_input_dim(samples)
 
     train_samples, val_samples = _split_samples(samples, config.val_split, config.seed)
     train_loader = DataLoader(
@@ -225,7 +287,11 @@ def train_proposal_model(config: TrainConfig) -> Path:
     )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = ProposalModel(hidden_dim=config.hidden_dim, dropout=config.dropout).to(device)
+    model = ProposalModel(
+        input_dim=input_dim,
+        hidden_dim=config.hidden_dim,
+        dropout=config.dropout,
+    ).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=config.lr)
     criterion = nn.CrossEntropyLoss()
 
@@ -261,7 +327,7 @@ def train_proposal_model(config: TrainConfig) -> Path:
     torch.save(
         {
             "model_state": model.state_dict(),
-            "input_dim": 8,
+            "input_dim": input_dim,
             "hidden_dim": config.hidden_dim,
             "dropout": config.dropout,
             "num_classes": 8,
