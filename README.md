@@ -7,9 +7,15 @@ Hand recognition pipeline for a local scrcpy window capture. The repository coll
 ```powershell
 python -m venv .venv
 .venv\Scripts\activate
-pip install --upgrade pip
+python -m pip install --upgrade pip
 pip install -r requirements.txt
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
 ```
+
+Notes:
+- The last line installs the official CUDA 12.8 (cu128) wheels. Skip it if you want CPU-only PyTorch.
+- `dxcam` is optional and only needed for higher-performance real-time capture. If it is missing, the capture code falls back to `mss`.
+  - Install it when needed: `pip install dxcam`
 
 ## Quick Start
 
