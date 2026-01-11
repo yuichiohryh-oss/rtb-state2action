@@ -128,10 +128,22 @@ Output schema (`actions.jsonl`):
 python -m scripts.build_state_role_dataset --hand data/result_full.txt --actions data/actions_full.jsonl --out data/state_role.jsonl --state-offset-ms 1000 --max-gap-ms 1500
 ```
 
-Include the previous action in the state (v2):
+Include history in the state:
 
 ```powershell
 python -m scripts.build_state_role_dataset --hand data/result_full.txt --actions data/actions_full.jsonl --out data/state_role.jsonl --include-prev-action
+```
+
+History options (`--history`):
+- 0: no history (v1)
+- 1: prev1 only (v2, default)
+- 2: prev1 + prev2 (v3)
+Note: `--include-prev-action` is kept for backward compatibility; `--history` >= 1 includes `prev_action` fields.
+
+v3 dataset example (prev1 + prev2):
+
+```powershell
+python -m scripts.build_state_role_dataset --hand data/result_full.txt --actions data/actions_full.jsonl --out data/state_role.jsonl --include-prev-action --history 2
 ```
 
 Output schema (`state_role.jsonl`):
@@ -146,7 +158,7 @@ Notes:
 
 ## Proposal Model (state -> role)
 
-The minimal proposal model predicts the next card role (1..8) from the hand state (v1) or hand+prev_action (v2).
+The minimal proposal model predicts the next card role (1..8) from the hand state (v1), hand+prev_action (v2), or hand+prev_action+prev2_action (v3).
 
 Train:
 
@@ -173,6 +185,12 @@ Infer (hand + prev_action):
 
 ```powershell
 python -m scripts.infer_proposal_model --model runs/<run_id>/model.pt --hand "0,1,1,1,1,0,0,0" --prev 4 --topk 3
+```
+
+Infer (hand + prev_action + prev2_action):
+
+```powershell
+python -m scripts.infer_proposal_model --model runs/<run_id>/model.pt --hand "0,1,1,1,1,0,0,0" --prev 4 --prev2 2 --topk 3
 ```
 
 Infer from `state_role.jsonl` (first N samples):
@@ -203,7 +221,7 @@ Input schema (`state_role.jsonl`):
 
 Notes:
 - `role` is 1..8 (external I/O keeps 1..8, internal model uses 0..7).
-- v1 uses hand-only state; v2 appends `prev_action_onehot` to reach 16 dims.
+- v1 uses hand-only state; v2 appends `prev_action_onehot` to reach 16 dims; v3 appends `prev2_action_onehot` to reach 24 dims.
 
 `label_hand_crops` shows key bindings and card mappings in the top-left corner; use `--no-help` to hide them. The fixed deck is the 2.6 hog list:
 - 1: HOG_RIDER

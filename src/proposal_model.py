@@ -20,11 +20,14 @@ class StateRoleSample:
     in_hand: list[float]
     role: int  # 1..8
     prev_action_onehot: list[float] | None = None
+    prev2_action_onehot: list[float] | None = None
 
     def features(self) -> list[float]:
         if self.prev_action_onehot is None:
             return self.in_hand
-        return self.in_hand + self.prev_action_onehot
+        if self.prev2_action_onehot is None:
+            return self.in_hand + self.prev_action_onehot
+        return self.in_hand + self.prev_action_onehot + self.prev2_action_onehot
 
 
 def _validate_in_hand_state(values: list[int], source: str, line_no: int) -> list[float]:
@@ -48,30 +51,35 @@ def _validate_role(role: int, source: str, line_no: int) -> int:
     return role
 
 
-def _validate_prev_action(prev_action: int, source: str, line_no: int) -> int:
-    if not isinstance(prev_action, int):
-        raise ValueError(f"prev_action must be int at {source}:{line_no}")
-    if prev_action < 0 or prev_action > 8:
-        raise ValueError(f"prev_action must be 0..8 at {source}:{line_no}")
-    return prev_action
+def _validate_action_id(action_id: int, name: str, source: str, line_no: int) -> int:
+    if not isinstance(action_id, int):
+        raise ValueError(f"{name} must be int at {source}:{line_no}")
+    if action_id < 0 or action_id > 8:
+        raise ValueError(f"{name} must be 0..8 at {source}:{line_no}")
+    return action_id
 
 
-def _prev_action_onehot(prev_action: int) -> list[float]:
+def _action_onehot(action_id: int) -> list[float]:
     values = [0.0 for _ in range(8)]
-    if prev_action > 0:
-        values[prev_action - 1] = 1.0
+    if action_id > 0:
+        values[action_id - 1] = 1.0
     return values
 
 
-def _validate_prev_action_onehot(values: list[int], source: str, line_no: int) -> list[float]:
+def _validate_action_onehot(
+    values: list[int],
+    name: str,
+    source: str,
+    line_no: int,
+) -> list[float]:
     if len(values) != 8:
-        raise ValueError(f"prev_action_onehot must have length 8 at {source}:{line_no}")
+        raise ValueError(f"{name} must have length 8 at {source}:{line_no}")
     floats: list[float] = []
     for idx, value in enumerate(values, start=1):
         if not isinstance(value, int):
-            raise ValueError(f"prev_action_onehot[{idx}] must be int at {source}:{line_no}")
+            raise ValueError(f"{name}[{idx}] must be int at {source}:{line_no}")
         if value not in (0, 1):
-            raise ValueError(f"prev_action_onehot[{idx}] must be 0 or 1 at {source}:{line_no}")
+            raise ValueError(f"{name}[{idx}] must be 0 or 1 at {source}:{line_no}")
         floats.append(float(value))
     return floats
 
@@ -97,21 +105,42 @@ def parse_state_role_lines(lines: Iterable[str], source: str) -> list[StateRoleS
         in_hand_floats = _validate_in_hand_state(in_hand, source, idx)
         role_id = _validate_role(role, source, idx)
         prev_onehot: list[float] | None = None
+        prev2_onehot: list[float] | None = None
         if "prev_action_onehot" in payload:
             prev_raw = payload["prev_action_onehot"]
             if not isinstance(prev_raw, list):
                 raise ValueError(f"prev_action_onehot must be list at {source}:{idx}")
-            prev_onehot = _validate_prev_action_onehot(prev_raw, source, idx)
+            prev_onehot = _validate_action_onehot(prev_raw, "prev_action_onehot", source, idx)
         if "prev_action" in payload:
-            prev_action = _validate_prev_action(payload["prev_action"], source, idx)
+            prev_action = _validate_action_id(payload["prev_action"], "prev_action", source, idx)
             if prev_onehot is None:
-                prev_onehot = _prev_action_onehot(prev_action)
+                prev_onehot = _action_onehot(prev_action)
             else:
-                expected = _prev_action_onehot(prev_action)
+                expected = _action_onehot(prev_action)
                 if prev_onehot != expected:
                     raise ValueError(f"prev_action_onehot mismatch at {source}:{idx}")
+        if "prev2_action_onehot" in payload:
+            prev2_raw = payload["prev2_action_onehot"]
+            if not isinstance(prev2_raw, list):
+                raise ValueError(f"prev2_action_onehot must be list at {source}:{idx}")
+            prev2_onehot = _validate_action_onehot(prev2_raw, "prev2_action_onehot", source, idx)
+        if "prev2_action" in payload:
+            prev2_action = _validate_action_id(payload["prev2_action"], "prev2_action", source, idx)
+            if prev2_onehot is None:
+                prev2_onehot = _action_onehot(prev2_action)
+            else:
+                expected = _action_onehot(prev2_action)
+                if prev2_onehot != expected:
+                    raise ValueError(f"prev2_action_onehot mismatch at {source}:{idx}")
+        if prev2_onehot is not None and prev_onehot is None:
+            raise ValueError(f"prev2_action_onehot requires prev_action_onehot at {source}:{idx}")
         samples.append(
-            StateRoleSample(in_hand=in_hand_floats, role=role_id, prev_action_onehot=prev_onehot)
+            StateRoleSample(
+                in_hand=in_hand_floats,
+                role=role_id,
+                prev_action_onehot=prev_onehot,
+                prev2_action_onehot=prev2_onehot,
+            )
         )
     return samples
 

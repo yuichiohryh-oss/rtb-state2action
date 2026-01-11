@@ -43,9 +43,9 @@ def _load_model(path: Path) -> ProposalModel:
     return model
 
 
-def _parse_prev_arg(prev_arg: int) -> int:
+def _parse_prev_arg(prev_arg: int, name: str) -> int:
     if prev_arg < 0 or prev_arg > 8:
-        raise ValueError("prev must be 0..8")
+        raise ValueError(f"{name} must be 0..8")
     return prev_arg
 
 
@@ -85,6 +85,7 @@ def build_parser() -> argparse.ArgumentParser:
     group.add_argument("--hand", type=str)
     group.add_argument("--from-state-role", type=Path)
     parser.add_argument("--prev", type=int)
+    parser.add_argument("--prev2", type=int)
     parser.add_argument("--n", type=int, default=20)
     return parser
 
@@ -100,6 +101,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--hand or --from-state-role is required")
     if args.prev is not None and args.hand is None:
         parser.error("--prev requires --hand")
+    if args.prev2 is not None and args.hand is None:
+        parser.error("--prev2 requires --hand")
     if args.from_state_role is not None and not args.from_state_role.exists():
         parser.error(f"--from-state-role not found: {args.from_state_role}")
     if args.n <= 0:
@@ -148,12 +151,22 @@ def main() -> None:
         try:
             hand = _parse_hand_arg(args.hand)
             prev_onehot = None
+            prev2_onehot = None
             if args.prev is not None:
-                prev_action = _parse_prev_arg(args.prev)
+                prev_action = _parse_prev_arg(args.prev, "prev")
                 prev_onehot = _prev_onehot(prev_action)
+            if args.prev2 is not None:
+                prev_action = 0 if args.prev is None else args.prev
+                prev_onehot = _prev_onehot(_parse_prev_arg(prev_action, "prev"))
+                prev2_action = _parse_prev_arg(args.prev2, "prev2")
+                prev2_onehot = _prev_onehot(prev2_action)
         except ValueError as exc:
             raise SystemExit(str(exc)) from exc
-        features = hand if prev_onehot is None else hand + prev_onehot
+        features = hand
+        if prev_onehot is not None:
+            features = features + prev_onehot
+        if prev2_onehot is not None:
+            features = features + prev2_onehot
         _infer_single(model, features, device, args.topk)
         return
 
