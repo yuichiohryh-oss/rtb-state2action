@@ -9,6 +9,7 @@ class RoiParams:
     y_ratio: float = 0.72
     height_ratio: float = 0.26
     x_margin_ratio: float = 0.02
+    x_offset_ratio: float = 0.0
 
 
 def compute_hand_roi(window_w: int, window_h: int, params: RoiParams) -> Tuple[int, int, int, int]:
@@ -19,8 +20,13 @@ def compute_hand_roi(window_w: int, window_h: int, params: RoiParams) -> Tuple[i
     y1 = max(0, y_start)
     x2 = min(window_w, window_w - x_margin)
     y2 = min(window_h, y_start + roi_h)
+    dx = int(window_w * params.x_offset_ratio)
+    x1 += dx
+    x2 += dx
+    x1 = max(0, x1)
+    x2 = min(window_w, x2)
     if x2 <= x1 or y2 <= y1:
-        raise ValueError("Invalid ROI computed for given window size")
+        raise ValueError("Invalid ROI computed after applying offsets; check ROI params")
     return x1, y1, x2, y2
 
 
