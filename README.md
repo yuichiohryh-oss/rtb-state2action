@@ -158,6 +158,7 @@ Artifacts are saved to `runs/YYYYMMDD_HHMMSS_proposal/`:
 
 ```
 model.pt
+best_model.pt
 config.json
 metrics.json
 ```
@@ -180,10 +181,10 @@ Infer from `state_role.jsonl` (first N samples):
 python -m scripts.infer_proposal_model --model runs/<run_id>/model.pt --from-state-role data/state_role.jsonl --n 20 --topk 3
 ```
 
-Evaluate (val split by default, same split seed as training):
+Evaluate (val split by default, same split seed as training). Use `best_model.pt` to reproduce peak validation metrics:
 
 ```powershell
-python -m scripts.eval_proposal_model --model runs/<run_id>/model.pt --data data/state_role.jsonl --split val --val-split 0.2 --seed 42 --topk 3 --out runs/<run_id>_proposal_eval/metrics.json
+python -m scripts.eval_proposal_model --model runs/<run_id>/best_model.pt --data data/state_role.jsonl --split val --val-split 0.2 --seed 42 --topk 3 --out runs/<run_id>_proposal_eval/metrics.json
 ```
 
 Evaluate on all samples (no split) or compare baselines:
