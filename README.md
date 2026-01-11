@@ -101,7 +101,15 @@ python -m scripts.collect_hand_crops --video samples/scrcpy_001.mp4 --video-fps 
 python -m scripts.infer_hand --window-title scrcpy_game --model runs/<run_id>/model.pt --state-out data/state_stream.jsonl
 ```
 
-`label_hand_crops` shows key bindings and card mappings in the top-left corner; use `--no-help` to hide them.
+`label_hand_crops` shows key bindings and card mappings in the top-left corner; use `--no-help` to hide them. The fixed deck is the 2.6 hog list:
+- 1: HOG_RIDER
+- 2: MUSKETEER
+- 3: CANNON
+- 4: ICE_GOLEM
+- 5: SKELETONS
+- 6: ICE_SPIRIT
+- 7: FIREBALL
+- 8: THE_LOG
 
 ## Testing
 
