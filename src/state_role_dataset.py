@@ -51,16 +51,22 @@ def build_state_role_records(
     max_gap_ms: int = 1500,
     include_debug: bool = False,
     include_prev_action: bool = False,
+    history: int = 1,
 ) -> tuple[list[dict], BuildStats]:
     if state_offset_ms < 0:
         raise ValueError("state_offset_ms must be non-negative")
     if max_gap_ms < 0:
         raise ValueError("max_gap_ms must be non-negative")
+    if history < 0 or history > 2:
+        raise ValueError("history must be 0..2")
 
     frame_times = [frame.t_ms for frame in frames]
     records: list[dict] = []
     skipped = 0
     prev_action_id = 0
+    prev2_action_id = 0
+    include_prev = include_prev_action or history >= 1
+    include_prev2 = history >= 2
 
     for action in actions:
         t_ms_event = action.get("t_ms")
@@ -74,11 +80,13 @@ def build_state_role_records(
         idx = bisect_right(frame_times, t_ms_state) - 1
         if idx < 0:
             skipped += 1
+            prev2_action_id = prev_action_id
             prev_action_id = card_id
             continue
         gap = t_ms_state - frame_times[idx]
         if gap > max_gap_ms:
             skipped += 1
+            prev2_action_id = prev_action_id
             prev_action_id = card_id
             continue
 
@@ -90,7 +98,7 @@ def build_state_role_records(
             "role": card_id,
             "state_source": "nearest_frame",
         }
-        if include_prev_action:
+        if include_prev:
             if prev_action_id < 0 or prev_action_id > 8:
                 raise ValueError(f"prev_action must be 0..8, got {prev_action_id}")
             prev_onehot = [0 for _ in range(8)]
@@ -98,6 +106,14 @@ def build_state_role_records(
                 prev_onehot[prev_action_id - 1] = 1
             record["prev_action"] = prev_action_id
             record["prev_action_onehot"] = prev_onehot
+        if include_prev2:
+            if prev2_action_id < 0 or prev2_action_id > 8:
+                raise ValueError(f"prev2_action must be 0..8, got {prev2_action_id}")
+            prev2_onehot = [0 for _ in range(8)]
+            if prev2_action_id > 0:
+                prev2_onehot[prev2_action_id - 1] = 1
+            record["prev2_action"] = prev2_action_id
+            record["prev2_action_onehot"] = prev2_onehot
         if include_debug:
             if "confidence" in action:
                 record["confidence"] = action["confidence"]
@@ -106,6 +122,7 @@ def build_state_role_records(
             if "hand_after" in action:
                 record["hand_after"] = action["hand_after"]
         records.append(record)
+        prev2_action_id = prev_action_id
         prev_action_id = card_id
 
     stats = BuildStats(

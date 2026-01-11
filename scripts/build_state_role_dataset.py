@@ -20,6 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-gap-ms", type=int, default=1500)
     parser.add_argument("--include-debug", action="store_true")
     parser.add_argument("--include-prev-action", action="store_true")
+    parser.add_argument("--history", type=int, default=1, choices=range(0, 3))
     return parser
 
 
@@ -30,6 +31,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--state-offset-ms must be non-negative")
     if args.max_gap_ms < 0:
         parser.error("--max-gap-ms must be non-negative")
+    if args.history < 0 or args.history > 2:
+        parser.error("--history must be 0..2")
     return args
 
 
@@ -77,6 +80,7 @@ def main() -> None:
         max_gap_ms=args.max_gap_ms,
         include_debug=args.include_debug,
         include_prev_action=args.include_prev_action,
+        history=args.history,
     )
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
