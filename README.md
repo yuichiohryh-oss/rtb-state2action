@@ -138,6 +138,46 @@ Notes:
 - `actions.t_ms` is closer to the confirmed play time, so `state_offset_ms` shifts the state earlier.
 - Use `--include-debug` to include `confidence`, `hand_before`, and `hand_after` in the output.
 
+## Proposal Model (state -> role)
+
+The minimal proposal model predicts the next card role (1..8) from the 8-dim hand state.
+
+Train:
+
+```powershell
+python -m scripts.train_proposal_model --data data/state_role.jsonl --epochs 30 --batch-size 64 --lr 1e-3 --seed 42 --val-split 0.2
+```
+
+Artifacts are saved to `runs/YYYYMMDD_HHMMSS_proposal/`:
+
+```
+model.pt
+config.json
+metrics.json
+```
+
+Infer (single hand):
+
+```powershell
+python -m scripts.infer_proposal_model --model runs/<run_id>/model.pt --hand "0,1,1,1,1,0,0,0" --topk 3
+```
+
+Infer from `state_role.jsonl` (first N samples):
+
+```powershell
+python -m scripts.infer_proposal_model --model runs/<run_id>/model.pt --from-state-role data/state_role.jsonl --n 20 --topk 3
+```
+
+Input schema (`state_role.jsonl`):
+
+```json
+{"in_hand_state": [0, 1, 1, 1, 1, 0, 0, 0], "role": 1}
+```
+
+Notes:
+- `role` is 1..8 (external I/O keeps 1..8, internal model uses 0..7).
+- v1 uses hand-only state; accuracy is expected to be limited and is primarily for pipeline validation.
+
 `label_hand_crops` shows key bindings and card mappings in the top-left corner; use `--no-help` to hide them. The fixed deck is the 2.6 hog list:
 - 1: HOG_RIDER
 - 2: MUSKETEER
