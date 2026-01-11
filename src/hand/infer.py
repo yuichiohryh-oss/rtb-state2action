@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -11,17 +10,21 @@ import torch
 from PIL import Image
 from torchvision import transforms
 
-from src.capture.roi import RoiParams, compute_hand_roi, split_roi_into_slots
-from src.capture.window_capture import WindowCapture
+from src.capture.frame_source import FrameSource, VideoFrameSource, WindowFrameSource
+from src.capture.roi import RoiParams
 from src.hand.model import build_model
+from src.hand.frame_slots import iter_hand_slots
 from src.state.state_writer import append_state
 
 
 @dataclass
 class InferConfig:
-    window_title: str
+    window_title: str | None
     model_path: Path
     interval_ms: int = 250
+    video_path: Path | None = None
+    video_fps: float = 4.0
+    max_frames: int | None = None
     history: int = 3
     smoothing: str = "majority"
     roi_params: RoiParams = RoiParams()
@@ -87,7 +90,7 @@ def _order_in_hand(in_hand: Dict[str, int], class_names: List[str]) -> Dict[str,
 def infer_loop(config: InferConfig) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model, class_names = _load_model(config.model_path, device)
-    capture = WindowCapture(config.window_title, prefer_dxcam=True)
+    frame_source = _build_frame_source(config)
 
     print(
         "infer_hand start:",
@@ -97,23 +100,12 @@ def infer_loop(config: InferConfig) -> None:
     )
 
     history: List[List[Tuple[int, float]]] = [[] for _ in range(4)]
-    last_ms = 0
 
-    while True:
-        now_ms = int(time.time() * 1000)
-        if now_ms - last_ms < config.interval_ms:
-            time.sleep(0.01)
-            continue
-        last_ms = now_ms
-
-        frame = capture.capture()
-        window_h, window_w = frame.shape[:2]
-        roi = compute_hand_roi(window_w, window_h, config.roi_params)
-        slots = split_roi_into_slots(roi, slots=4)
+    for frame_slots in iter_hand_slots(frame_source, config.roi_params, config.max_frames):
         slot_preds: List[int] = []
 
-        for slot_idx, (x1, y1, x2, y2) in enumerate(slots):
-            crop = frame[y1:y2, x1:x2]
+        for slot_idx, (x1, y1, x2, y2) in enumerate(frame_slots.slots):
+            crop = frame_slots.frame[y1:y2, x1:x2]
             tensor = _preprocess(crop, config.image_size).unsqueeze(0).to(device)
             with torch.no_grad():
                 logits = model(tensor)
@@ -126,7 +118,15 @@ def infer_loop(config: InferConfig) -> None:
 
         in_hand = build_in_hand(slot_preds, class_names)
         ordered_in_hand = _order_in_hand(in_hand, class_names)
-        state = {"t_ms": now_ms, "in_hand": ordered_in_hand}
+        state = {"t_ms": frame_slots.t_ms, "in_hand": ordered_in_hand}
         if config.state_out is not None:
             append_state(config.state_out, state)
         print(json.dumps(state))
+
+
+def _build_frame_source(config: InferConfig) -> FrameSource:
+    if config.video_path is not None:
+        return VideoFrameSource(config.video_path, video_fps=config.video_fps)
+    if not config.window_title:
+        raise ValueError("window_title is required when video_path is not set")
+    return WindowFrameSource(config.window_title, interval_ms=config.interval_ms, prefer_dxcam=True)
