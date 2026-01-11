@@ -122,6 +122,22 @@ Output schema (`actions.jsonl`):
 {"t_ms": 1000, "card_id": 1, "event": "play", "confidence": 0.8, "hand_before": [1, 2, 3, 4], "hand_after": [2, 3, 4, 5], "notes": "confirm=2 pre_hold=2/2 invalid_window=0"}
 ```
 
+`build_state_role_dataset` joins hand frames and action events into state-role pairs:
+
+```powershell
+python -m scripts.build_state_role_dataset --hand data/result_full.txt --actions data/actions_full.jsonl --out data/state_role.jsonl --state-offset-ms 1000 --max-gap-ms 1500
+```
+
+Output schema (`state_role.jsonl`):
+
+```json
+{"t_ms_event": 20266, "t_ms_state": 19266, "in_hand_state": [0, 1, 1, 1, 0, 0, 0, 1], "role": 1, "state_source": "nearest_frame"}
+```
+
+Notes:
+- `actions.t_ms` is closer to the confirmed play time, so `state_offset_ms` shifts the state earlier.
+- Use `--include-debug` to include `confidence`, `hand_before`, and `hand_after` in the output.
+
 `label_hand_crops` shows key bindings and card mappings in the top-left corner; use `--no-help` to hide them. The fixed deck is the 2.6 hog list:
 - 1: HOG_RIDER
 - 2: MUSKETEER
