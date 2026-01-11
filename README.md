@@ -17,13 +17,23 @@ Notes:
 - `dxcam` is optional and only needed for higher-performance real-time capture. If it is missing, the capture code falls back to `mss`.
   - Install it when needed: `pip install dxcam`
 
-## Quick Start
+## Quickstart（最短手順）
 
 ```powershell
-python -m scripts.collect_hand_crops --window-title scrcpy_game --interval-ms 250
+python -m scripts.collect_hand_crops --window-title scrcpy_game --interval-ms 250 --hand-y-ratio 0.72 --hand-height-ratio 0.26
 python -m scripts.label_hand_crops --crops-jsonl data/hand_crops.jsonl
 python -m scripts.train_hand_cnn --labels data/hand_labels.jsonl
 python -m scripts.infer_hand --window-title scrcpy_game --model runs/<run_id>/model.pt
+```
+
+ROIの調整:
+- `y_ratio`: ウィンドウ高さに対するROI開始位置の比率（例: 0.72）
+- `height_ratio`: ウィンドウ高さに対するROIの高さ比率（例: 0.26）
+
+プレビュー確認（保存なし、`q`で終了）:
+
+```powershell
+python -m scripts.collect_hand_crops --window-title scrcpy_game --preview
 ```
 
 ## Data Layout
@@ -53,7 +63,7 @@ runs/
 `collect_hand_crops` supports ROI parameters:
 
 ```powershell
-python -m scripts.collect_hand_crops --window-title scrcpy_game --interval-ms 250 --y-ratio 0.72 --height-ratio 0.26
+python -m scripts.collect_hand_crops --window-title scrcpy_game --interval-ms 250 --hand-y-ratio 0.72 --hand-height-ratio 0.26
 ```
 
 `infer_hand` can append to a JSONL state stream:

@@ -69,10 +69,32 @@ def build_in_hand(slot_preds: List[int], class_names: List[str]) -> Dict[str, in
     return in_hand
 
 
+def _card_sort_key(name: str) -> Tuple[int, int | str]:
+    if name.startswith("CARD_"):
+        suffix = name[5:]
+        if suffix.isdigit():
+            return (0, int(suffix))
+    return (1, name)
+
+
+def _order_in_hand(in_hand: Dict[str, int], class_names: List[str]) -> Dict[str, int]:
+    ordered: Dict[str, int] = {}
+    for name in sorted(class_names, key=_card_sort_key):
+        ordered[name] = in_hand.get(name, 0)
+    return ordered
+
+
 def infer_loop(config: InferConfig) -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model, class_names = _load_model(config.model_path, device)
     capture = WindowCapture(config.window_title, prefer_dxcam=True)
+
+    print(
+        "infer_hand start:",
+        f"image_size={config.image_size}",
+        f"smoothing={config.smoothing}",
+        sep=" ",
+    )
 
     history: List[List[Tuple[int, float]]] = [[] for _ in range(4)]
     last_ms = 0
@@ -103,7 +125,8 @@ def infer_loop(config: InferConfig) -> None:
             slot_preds.append(stable)
 
         in_hand = build_in_hand(slot_preds, class_names)
-        state = {"t_ms": now_ms, "in_hand": in_hand}
+        ordered_in_hand = _order_in_hand(in_hand, class_names)
+        state = {"t_ms": now_ms, "in_hand": ordered_in_hand}
         if config.state_out is not None:
             append_state(config.state_out, state)
         print(json.dumps(state))

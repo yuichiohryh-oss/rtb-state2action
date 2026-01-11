@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 import cv2
 
@@ -35,49 +35,66 @@ def _load_paths(crops_jsonl: Path) -> List[str]:
     return paths
 
 
+def _load_existing_labels(output_jsonl: Path) -> Dict[str, str]:
+    if not output_jsonl.exists():
+        return {}
+    labels: Dict[str, str] = {}
+    with output_jsonl.open("r", encoding="utf-8") as fp:
+        for line in fp:
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            labels[record["path"]] = record["label"]
+    return labels
+
+
 def label_crops(config: LabelerConfig) -> None:
     paths = _load_paths(config.crops_jsonl)
-    labels: Dict[str, str] = {}
+    labels = _load_existing_labels(config.output_jsonl)
+    target_paths = [path for path in paths if path not in labels]
+    if not target_paths:
+        print("No unlabeled crops found. Nothing to do.")
+        return
     idx = 0
 
-    while idx < len(paths):
-        img_path = paths[idx]
-        img = cv2.imread(img_path)
-        if img is None:
-            idx += 1
-            continue
-        display = img.copy()
-        cv2.putText(
-            display,
-            f"{idx + 1}/{len(paths)}",
-            (10, 30),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1.0,
-            (0, 255, 0),
-            2,
-            cv2.LINE_AA,
-        )
-        cv2.imshow("hand_labeler", display)
-        key = cv2.waitKey(0) & 0xFF
+    config.output_jsonl.parent.mkdir(parents=True, exist_ok=True)
+    with config.output_jsonl.open("a", encoding="utf-8") as fp:
+        while idx < len(target_paths):
+            img_path = target_paths[idx]
+            img = cv2.imread(img_path)
+            if img is None:
+                idx += 1
+                continue
+            display = img.copy()
+            cv2.putText(
+                display,
+                f"{idx + 1}/{len(target_paths)}",
+                (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1.0,
+                (0, 255, 0),
+                2,
+                cv2.LINE_AA,
+            )
+            cv2.imshow("hand_labeler", display)
+            key = cv2.waitKey(0) & 0xFF
 
-        if key == ord("q"):
-            break
-        if key == ord("n"):
-            idx += 1
-            continue
-        if key == ord("b"):
-            idx = max(0, idx - 1)
-            labels.pop(img_path, None)
-            continue
-        if ord("1") <= key <= ord("8"):
-            class_idx = key - ord("1")
-            if class_idx < len(config.class_names):
-                labels[img_path] = config.class_names[class_idx]
-            idx += 1
-            continue
+            if key == ord("q"):
+                break
+            if key == ord("n"):
+                idx += 1
+                continue
+            if key == ord("b"):
+                idx = max(0, idx - 1)
+                labels.pop(img_path, None)
+                continue
+            if ord("1") <= key <= ord("8"):
+                class_idx = key - ord("1")
+                if class_idx < len(config.class_names):
+                    labels[img_path] = config.class_names[class_idx]
+                    fp.write(json.dumps({"path": img_path, "label": labels[img_path]}) + "\n")
+                    fp.flush()
+                idx += 1
+                continue
 
     cv2.destroyAllWindows()
-    config.output_jsonl.parent.mkdir(parents=True, exist_ok=True)
-    with config.output_jsonl.open("w", encoding="utf-8") as fp:
-        for path, label in labels.items():
-            fp.write(json.dumps({"path": path, "label": label}) + "\n")

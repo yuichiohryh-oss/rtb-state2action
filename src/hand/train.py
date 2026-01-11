@@ -139,6 +139,17 @@ def train_model(config: TrainConfig) -> Path:
     if not samples:
         raise RuntimeError("No labeled samples found")
 
+    print(
+        "train_hand_cnn start:",
+        f"image_size={config.image_size}",
+        f"batch_size={config.batch_size}",
+        f"epochs={config.epochs}",
+        f"lr={config.lr}",
+        "augment=on",
+        "split=session_80_20",
+        sep=" ",
+    )
+
     train_samples, val_samples = _split_by_session(samples, seed=config.seed)
     train_tf, val_tf = _make_transforms(config.image_size)
 
