@@ -181,6 +181,9 @@ class ProposalModel(nn.Module):
         return self.net(x)
 
 
+CLASS_WEIGHT_CLIP = 5.0
+
+
 @dataclass(frozen=True)
 class TrainConfig:
     data_path: Path
@@ -195,6 +198,7 @@ class TrainConfig:
     save_best: bool = True
     metric: str = "val_acc"
     early_stopping_patience: int = 0
+    class_weight: str = "none"
 
 
 def seed_everything(seed: int) -> None:
@@ -248,6 +252,28 @@ def split_state_role_samples(
     samples: list[StateRoleSample], val_split: float, seed: int
 ) -> tuple[list[StateRoleSample], list[StateRoleSample]]:
     return _split_samples(samples, val_split, seed)
+
+
+def _class_distribution(samples: Sequence[StateRoleSample], num_classes: int = 8) -> list[int]:
+    counts = [0 for _ in range(num_classes)]
+    for sample in samples:
+        counts[sample.role - 1] += 1
+    return counts
+
+
+def _balanced_class_weights(
+    counts: Sequence[int], clip: float | None = None
+) -> list[float]:
+    total = sum(counts)
+    num_classes = len(counts)
+    weights: list[float] = []
+    for count in counts:
+        denom = num_classes * max(count, 1)
+        weight = (total / denom) if total > 0 else 0.0
+        if clip is not None:
+            weight = min(weight, clip)
+        weights.append(weight)
+    return weights
 
 
 def _run_epoch(
@@ -314,6 +340,8 @@ def train_proposal_model(config: TrainConfig) -> Path:
         raise ValueError("metric must be 'val_acc' or 'val_top3'")
     if config.early_stopping_patience < 0:
         raise ValueError("early_stopping_patience must be >= 0")
+    if config.class_weight not in ("none", "balanced"):
+        raise ValueError("class_weight must be 'none' or 'balanced'")
 
     seed_everything(config.seed)
     input_dim = resolve_input_dim(samples)
@@ -339,7 +367,20 @@ def train_proposal_model(config: TrainConfig) -> Path:
         dropout=config.dropout,
     ).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=config.lr)
-    criterion = nn.CrossEntropyLoss()
+    train_class_distribution = _class_distribution(train_samples)
+    class_weights = None
+    class_weight_clip = None
+    if config.class_weight == "balanced":
+        class_weights = _balanced_class_weights(train_class_distribution, CLASS_WEIGHT_CLIP)
+        class_weight_clip = CLASS_WEIGHT_CLIP
+        class_weights_tensor = torch.tensor(
+            class_weights,
+            dtype=torch.float32,
+            device=device,
+        )
+        criterion = nn.CrossEntropyLoss(weight=class_weights_tensor)
+    else:
+        criterion = nn.CrossEntropyLoss()
 
     print(
         "train_proposal_model start:",
@@ -419,6 +460,7 @@ def train_proposal_model(config: TrainConfig) -> Path:
         "save_best": config.save_best,
         "metric": config.metric,
         "early_stopping_patience": config.early_stopping_patience,
+        "class_weight": config.class_weight,
     }
     config_path.write_text(json.dumps(config_payload, indent=2), encoding="utf-8")
 
@@ -435,7 +477,13 @@ def train_proposal_model(config: TrainConfig) -> Path:
         "best_val_acc": best_val_acc,
         "best_val_top3": best_val_top3,
         "best_metric_name": config.metric,
+        "train_class_distribution": train_class_distribution,
+        "class_weight_mode": config.class_weight,
     }
+    if class_weights is not None:
+        metrics_payload["class_weights"] = class_weights
+        if class_weight_clip is not None:
+            metrics_payload["class_weight_clip"] = class_weight_clip
     metrics_path.write_text(json.dumps(metrics_payload, indent=2), encoding="utf-8")
 
     return run_dir
