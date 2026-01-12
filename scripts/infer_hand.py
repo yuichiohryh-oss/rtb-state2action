@@ -19,6 +19,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--smoothing", choices=["majority", "max"], default="majority")
     parser.add_argument("--state-out", type=Path, default=None)
     parser.add_argument("--image-size", type=int, default=96)
+    parser.add_argument("--enforce-unique-cards", action="store_true")
+    parser.add_argument("--emit-slots", action="store_true")
     parser.add_argument("--y-ratio", type=float, default=0.72)
     parser.add_argument("--height-ratio", type=float, default=0.26)
     parser.add_argument("--x-margin-ratio", type=float, default=0.02)
@@ -58,6 +60,8 @@ def main() -> None:
         smoothing=args.smoothing,
         state_out=args.state_out,
         image_size=args.image_size,
+        enforce_unique_cards=args.enforce_unique_cards,
+        emit_slots=args.emit_slots,
         roi_params=roi_params,
     )
     infer_loop(config)
