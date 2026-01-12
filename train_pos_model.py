@@ -111,6 +111,9 @@ def evaluate(
     top1_sum = 0.0
     top3_sum = 0.0
     dist_sum = 0.0
+    within1_sum = 0.0
+    within2_sum = 0.0
+    within3_sum = 0.0
     count = 0
     with torch.no_grad():
         for images, labels in loader:
@@ -125,6 +128,9 @@ def evaluate(
             preds = logits.argmax(dim=1)
             dist = manhattan_distance(preds, labels, grid_w)
             dist_sum += float(dist.sum().item())
+            within1_sum += float((dist <= 1).sum().item())
+            within2_sum += float((dist <= 2).sum().item())
+            within3_sum += float((dist <= 3).sum().item())
             count += batch
     denom = max(1, count)
     return {
@@ -132,6 +138,9 @@ def evaluate(
         "top1": top1_sum / denom,
         "top3": top3_sum / denom,
         "mean_manhattan": dist_sum / denom,
+        "within1": within1_sum / denom,
+        "within2": within2_sum / denom,
+        "within3": within3_sum / denom,
         "count": float(count),
     }
 
@@ -216,11 +225,17 @@ def train(config: TrainConfig) -> None:
             "train_top1": train_metrics["top1"],
             "train_top3": train_metrics["top3"],
             "train_mean_manhattan": train_metrics["mean_manhattan"],
+            "train_within1": train_metrics["within1"],
+            "train_within2": train_metrics["within2"],
+            "train_within3": train_metrics["within3"],
             "train_count": train_metrics["count"],
             "val_loss": val_metrics["loss"],
             "val_top1": val_metrics["top1"],
             "val_top3": val_metrics["top3"],
             "val_mean_manhattan": val_metrics["mean_manhattan"],
+            "val_within1": val_metrics["within1"],
+            "val_within2": val_metrics["within2"],
+            "val_within3": val_metrics["within3"],
             "val_count": val_metrics["count"],
             "train_samples": train_sample_count,
             "val_samples": val_sample_count,
