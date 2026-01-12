@@ -19,6 +19,8 @@ param(
 
   [double]$Lr = 1e-3,
 
+  [string]$DebugDir = "",
+
   [string]$VenvPath = ".\\.venv\\Scripts\\Activate.ps1"
 )
 
@@ -36,8 +38,26 @@ if (!(Test-Path $VenvPath)) {
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $manifestPath = Join-Path $OutDir "manifest.jsonl"
 
+if ([string]::IsNullOrWhiteSpace($DebugDir)) {
+  $candidateDebugDir = Join-Path (Split-Path $InputJsonl -Parent) "debug_pos"
+  if (Test-Path $candidateDebugDir) {
+    $DebugDir = $candidateDebugDir
+  }
+}
+
 Write-Host "=== build position manifest ==="
-python tools/build_pos_dataset.py --input $InputJsonl --out $manifestPath --min-conf $MinConf --grid-w $GridW --grid-h $GridH
+$buildArgs = @(
+  "tools/build_pos_dataset.py",
+  "--input", $InputJsonl,
+  "--out", $manifestPath,
+  "--min-conf", $MinConf,
+  "--grid-w", $GridW,
+  "--grid-h", $GridH
+)
+if (-not [string]::IsNullOrWhiteSpace($DebugDir)) {
+  $buildArgs += @("--debug-dir", $DebugDir)
+}
+python @buildArgs
 
 Write-Host ""
 Write-Host "=== train position model ==="
