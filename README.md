@@ -214,6 +214,10 @@ PowerShell runner (builds manifest then trains):
 .\tools\run_train_pos.ps1 -InputJsonl runs\smoke\actions_tap_pos.jsonl -OutDir runs\pos_train\smoke -Epochs 5
 ```
 
+If the manifest has 0 samples:
+- Rows with `pos.cell_id` set to null are skipped.
+- Provide `--debug-dir` (or `-DebugDir`) when `paths.diff` is missing so diff images can be resolved.
+
 Outputs:
 
 ```
