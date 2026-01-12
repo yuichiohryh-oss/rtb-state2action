@@ -64,6 +64,36 @@ def build_parser() -> argparse.ArgumentParser:
         default=0,
         help="Draw top-N candidate component boxes/scores in debug output.",
     )
+    parser.add_argument(
+        "--tap-prior",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="When action.tap is available, downweight candidates far from the tap.",
+    )
+    parser.add_argument(
+        "--tap-sigma-frac",
+        type=float,
+        default=0.20,
+        help="Sigma as a fraction of ROI width when --tap-sigma-px is 0.",
+    )
+    parser.add_argument(
+        "--tap-sigma-px",
+        type=int,
+        default=0,
+        help="Sigma in pixels (overrides --tap-sigma-frac when > 0).",
+    )
+    parser.add_argument(
+        "--tap-prior-max-factor",
+        type=float,
+        default=1.0,
+        help="Clamp upper bound for tap prior weight.",
+    )
+    parser.add_argument(
+        "--tap-prior-min-factor",
+        type=float,
+        default=0.05,
+        help="Clamp lower bound for tap prior weight.",
+    )
     return parser
 
 
@@ -86,6 +116,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--self-side-ratio must be between 0 and 1")
     if args.debug_topn < 0:
         parser.error("--debug-topn must be non-negative")
+    if args.tap_sigma_frac < 0:
+        parser.error("--tap-sigma-frac must be non-negative")
+    if args.tap_sigma_px < 0:
+        parser.error("--tap-sigma-px must be non-negative")
+    if args.tap_prior_min_factor < 0 or args.tap_prior_max_factor < 0:
+        parser.error("--tap-prior-min-factor/--tap-prior-max-factor must be non-negative")
+    if args.tap_prior_min_factor > args.tap_prior_max_factor:
+        parser.error("--tap-prior-min-factor must be <= --tap-prior-max-factor")
     return args
 
 
@@ -229,6 +267,8 @@ def draw_debug_image(
     after_roi: np.ndarray,
     mask: np.ndarray,
     centroid: Tuple[float, float] | None,
+    tap_xy: Tuple[float, float] | None,
+    picked_bbox: Tuple[int, int, int, int] | None,
     candidates: list[dict] | None,
     debug_topn: int,
     grid_w: int,
@@ -245,6 +285,14 @@ def draw_debug_image(
     if centroid is not None:
         cx, cy = centroid
         cv2.circle(canvas, (int(cx), int(cy)), 6, (0, 0, 255), -1)
+    if tap_xy is not None:
+        tx, ty = tap_xy
+        tx_i, ty_i = int(round(tx)), int(round(ty))
+        cv2.line(canvas, (tx_i - 6, ty_i), (tx_i + 6, ty_i), (255, 0, 255), 1)
+        cv2.line(canvas, (tx_i, ty_i - 6), (tx_i, ty_i + 6), (255, 0, 255), 1)
+    if picked_bbox is not None:
+        x, y, w, h = picked_bbox
+        cv2.rectangle(canvas, (x, y), (x + w, y + h), (0, 140, 255), 2)
 
     if candidates and debug_topn > 0:
         for comp in sorted(candidates, key=lambda item: item["score"], reverse=True)[
@@ -271,6 +319,66 @@ def draw_debug_image(
     canvas[0:thumb_h, 0:thumb_w] = mask_thumb_bgr
 
     cv2.imwrite(str(debug_path), canvas)
+
+
+def extract_tap_xy(action: dict) -> Tuple[float, float] | None:
+    tap = action.get("tap")
+    if not isinstance(tap, dict):
+        return None
+    if "x" not in tap or "y" not in tap:
+        return None
+    try:
+        return float(tap["x"]), float(tap["y"])
+    except (TypeError, ValueError):
+        return None
+
+
+def tap_xy_in_roi(
+    tap_xy: Tuple[float, float], roi: Tuple[int, int, int, int]
+) -> Tuple[float, float] | None:
+    tap_x, tap_y = tap_xy
+    roi_x, roi_y, roi_w, roi_h = roi
+    rel_x = tap_x - roi_x
+    rel_y = tap_y - roi_y
+    if rel_x < 0 or rel_y < 0 or rel_x >= roi_w or rel_y >= roi_h:
+        return None
+    return float(rel_x), float(rel_y)
+
+
+def tap_sigma_px(args: argparse.Namespace, roi_w: int, roi_h: int) -> float:
+    if args.tap_sigma_px > 0:
+        sigma = float(args.tap_sigma_px)
+    else:
+        sigma = float(roi_w) * float(args.tap_sigma_frac)
+    return max(10.0, sigma)
+
+
+def apply_tap_prior(
+    candidates: list[dict],
+    tap_xy: Tuple[float, float],
+    sigma_px: float,
+    min_factor: float,
+    max_factor: float,
+) -> None:
+    if sigma_px <= 0:
+        return
+    denom = 2.0 * sigma_px * sigma_px
+    for comp in candidates:
+        score_raw = float(comp["score"])
+        comp["score_raw"] = score_raw
+        centroid = comp.get("centroid")
+        if centroid is None:
+            x, y, w, h = comp["bbox"]
+            cx = x + w / 2.0
+            cy = y + h / 2.0
+        else:
+            cx, cy = centroid
+        dx = float(cx) - tap_xy[0]
+        dy = float(cy) - tap_xy[1]
+        dist2 = dx * dx + dy * dy
+        w_raw = float(np.exp(-dist2 / denom))
+        w = max(min_factor, min(max_factor, w_raw))
+        comp["score"] = score_raw * w
 
 
 def main() -> None:
@@ -338,6 +446,26 @@ def main() -> None:
                     filtered = filter_self_side(components, mask.shape[0], args.self_side_ratio)
                     if filtered:
                         candidates = filtered
+                tap_xy = None
+                tap_roi_xy = None
+                sigma_px = None
+                best_before = None
+                best_after = None
+                if args.tap_prior:
+                    tap_xy = extract_tap_xy(action)
+                    if tap_xy is not None:
+                        tap_roi_xy = tap_xy_in_roi(tap_xy, roi)
+                if tap_roi_xy is not None and candidates:
+                    sigma_px = tap_sigma_px(args, roi[2], roi[3])
+                    best_before = max(comp["score"] for comp in candidates)
+                    apply_tap_prior(
+                        candidates,
+                        tap_roi_xy,
+                        sigma_px,
+                        args.tap_prior_min_factor,
+                        args.tap_prior_max_factor,
+                    )
+                    best_after = max(comp["score"] for comp in candidates)
                 picked = pick_component(candidates)
                 centroid = None if picked is None else picked["centroid"]
 
@@ -367,6 +495,22 @@ def main() -> None:
                 handle.write(json.dumps(action_out, ensure_ascii=True) + "\n")
 
                 if args.debug_dir is not None:
+                    if tap_roi_xy is not None:
+                        best_before_str = (
+                            f"{best_before:.3f}" if best_before is not None else "n/a"
+                        )
+                        best_after_str = (
+                            f"{best_after:.3f}" if best_after is not None else "n/a"
+                        )
+                        print(
+                            "tap_prior"
+                            f" idx={idx}"
+                            f" t_ms={t_ms}"
+                            f" tap=({tap_roi_xy[0]:.1f},{tap_roi_xy[1]:.1f})"
+                            f" sigma_px={sigma_px:.2f}"
+                            f" best_before={best_before_str}"
+                            f" best_after={best_after_str}"
+                        )
                     name = f"{idx:04d}_t{t_ms}.jpg"
                     debug_path = args.debug_dir / name
                     draw_debug_image(
@@ -374,6 +518,8 @@ def main() -> None:
                         after_roi,
                         mask,
                         centroid,
+                        tap_roi_xy,
+                        None if picked is None else picked["bbox"],
                         candidates,
                         args.debug_topn,
                         args.grid_w,
