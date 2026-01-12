@@ -16,7 +16,9 @@ param(
   [double]$x_margin_ratio = 0.13,
   [double]$x_offset_ratio = 0.09,
 
-  [switch]$IncludePrevAction = $true
+  [switch]$IncludePrevAction = $true,
+
+  [string]$InferArgs = ""
 )
 
 Set-StrictMode -Version Latest
@@ -33,6 +35,9 @@ if (!(Test-Path $VenvPath)) {
 . $VenvPath
 
 # Resolve video path
+if (!(Test-Path $Video)) {
+  throw "Video not found: $Video"
+}
 $videoPath = (Resolve-Path $Video).Path
 $stem = [IO.Path]::GetFileNameWithoutExtension($videoPath)
 
@@ -50,12 +55,30 @@ Write-Host "outDir:   $OutDir"
 Write-Host ""
 
 # 1) infer_hand (UTF-8 output)
-python -m scripts.infer_hand `
-  --video $videoPath `
-  --video-fps $Fps `
-  --model $InferModel `
-  --y-ratio $y_ratio --height-ratio $height_ratio --x-margin-ratio $x_margin_ratio --x-offset-ratio $x_offset_ratio |
-  Out-File -FilePath $hand -Encoding utf8
+$extraInferArgs = @()
+if ($InferArgs -and $InferArgs.Trim()) {
+  $pattern = '("([^"\\]|\\.)*"|''([^''\\]|\\.)*''|\S+)'
+  foreach ($m in [regex]::Matches($InferArgs, $pattern)) {
+    $arg = $m.Value
+    if (($arg.StartsWith('"') -and $arg.EndsWith('"')) -or ($arg.StartsWith("'") -and $arg.EndsWith("'"))) {
+      $arg = $arg.Substring(1, $arg.Length - 2)
+    }
+    if ($arg) { $extraInferArgs += $arg }
+  }
+}
+
+$inferHandArgs = @(
+  "--video", $videoPath,
+  "--video-fps", $Fps,
+  "--model", $InferModel,
+  "--y-ratio", $y_ratio,
+  "--height-ratio", $height_ratio,
+  "--x-margin-ratio", $x_margin_ratio,
+  "--x-offset-ratio", $x_offset_ratio
+)
+if ($extraInferArgs.Count -gt 0) { $inferHandArgs += $extraInferArgs }
+
+python -m scripts.infer_hand @inferHandArgs | Out-File -FilePath $hand -Encoding utf8
 
 # 2) extract_actions
 python -m scripts.extract_actions_from_hand --in $hand --out $actions

@@ -117,6 +117,14 @@ cd repoRoot
 python -m scripts.infer_hand --video ... --video-fps 10 --model ... --enforce-unique-cards --emit-slots > out.hand.txt
 ```
 
+Regenerate 231410 via `tools/regen_one.ps1` with extra infer flags:
+
+```powershell
+cd repoRoot
+.\.venv\Scripts\Activate.ps1
+.\tools\regen_one.ps1 -Video .\samples\batch3\hog_yt_2026-01-11_231410.mp4 -Fps 10 -OutDir data\batch3_fps10_enforced -InferArgs "--enforce-unique-cards --emit-slots"
+```
+
 `extract_actions_from_hand` converts the JSONL stream into action events:
 
 ```powershell
