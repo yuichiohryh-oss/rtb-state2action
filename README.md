@@ -138,6 +138,16 @@ Output schema (`actions.jsonl`):
 {"t_ms": 1000, "card_id": 1, "event": "play", "confidence": 0.8, "hand_before": [1, 2, 3, 4], "hand_after": [2, 3, 4, 5], "notes": "confirm=2 pre_hold=2/2 invalid_window=0"}
 ```
 
+Label play positions from board diffs (`actions.jsonl` -> `actions_with_pos.jsonl`):
+
+```powershell
+cd repoRoot
+.\.venv\Scripts\Activate.ps1
+python .\tools\label_position_from_diff.py --video .\samples\batch3\hog_yt_2026-01-11_231410.mp4 --actions .\data\batch3_fps10_enforced\actions.jsonl --out .\data\batch3_fps10_enforced\actions_with_pos.jsonl --debug-dir .\data\batch3_fps10_enforced\pos_debug --dt-ms 300 --grid-w 18 --grid-h 11 --thr 25 --after-stability 2
+```
+
+If `--roi` is omitted, an interactive ROI picker opens (use `--roi-pick-tms` to choose the frame time).
+
 `build_state_role_dataset` joins hand frames and action events into state-role pairs:
 
 ```powershell
