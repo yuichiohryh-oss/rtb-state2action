@@ -279,6 +279,8 @@ def main() -> None:
                     continue
                 event_wall = base_event_wall + (event.t_s - base_event_ts)
                 t_ms = int(round((event_wall - capture_start_wall) * 1000))
+                if t_ms < 0:
+                    t_ms = 0
                 x, x_scale = scale_raw(event.x_raw, raw_max_x, device_w)
                 y, y_scale = scale_raw(event.y_raw, raw_max_y, device_h)
                 tap_rows.append(
