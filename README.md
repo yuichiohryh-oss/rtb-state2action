@@ -181,6 +181,47 @@ actions_tap_pos.jsonl
 debug_pos/
 ```
 
+## Position model (cell classification)
+
+Use the tap teacher output (`actions_tap_pos.jsonl`) to train a minimal cell classifier.
+
+Build a manifest from a run:
+
+```powershell
+python tools\build_pos_dataset.py ^
+  --input runs\smoke\actions_tap_pos.jsonl ^
+  --out data\pos\smoke_manifest.jsonl ^
+  --min-conf 0.7
+```
+
+Train the model:
+
+```powershell
+python train_pos_model.py ^
+  --train-manifest data\pos\smoke_manifest.jsonl ^
+  --val-manifest data\pos\smoke_manifest.jsonl ^
+  --grid-w 18 --grid-h 11 ^
+  --img-size 224 ^
+  --batch-size 32 ^
+  --epochs 5 ^
+  --lr 1e-3 ^
+  --out runs\pos_train\exp001
+```
+
+PowerShell runner (builds manifest then trains):
+
+```powershell
+.\tools\run_train_pos.ps1 -InputJsonl runs\smoke\actions_tap_pos.jsonl -OutDir runs\pos_train\smoke -Epochs 5
+```
+
+Outputs:
+
+```
+config.json
+metrics.jsonl
+model.pt
+```
+
 ## Mouse-based tap teacher capture (Windows)
 
 Prereqs:
