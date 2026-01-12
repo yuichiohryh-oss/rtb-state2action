@@ -149,6 +149,65 @@ python .\tools\label_position_from_diff.py --video .\samples\batch3\hog_yt_2026-
 If `--roi` is omitted, an interactive ROI picker opens (use `--roi-pick-tms` to choose the frame time).
 If enemy-side overlays are being picked, keep `--self-side-only` enabled and adjust `--self-side-ratio` (defaults to 0.52).
 
+## Tap teacher pipeline
+
+Prereqs:
+- `adb` and `scrcpy` available in PATH
+- USB debugging enabled on the device
+
+One command capture + label:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/run_tap_teacher.ps1 -Seconds 180 -OutDir runs
+```
+
+If `adb` / `scrcpy` are not on PATH, pass `-Adb` / `-Scrcpy` with full paths:
+
+```powershell
+.\tools\run_tap_teacher.ps1 `
+  -Seconds 180 `
+  -OutDir runs `
+  -Scrcpy "C:\Users\...\scrcpy.exe"
+```
+
+Outputs (created under `runs/<run_id>/`):
+
+```
+video.mp4
+taps.csv
+meta.json
+actions_tap.jsonl
+actions_tap_pos.jsonl
+debug_pos/
+```
+
+## Mouse-based tap teacher capture (Windows)
+
+Prereqs:
+- `scrcpy` available on disk (pass with `-Scrcpy` if not on PATH).
+- Python deps: `pywin32`, `pynput`, and `opencv-python` (recommended for frame metadata).
+
+Run the end-to-end pipeline (record + clicks + diff labeling):
+
+```powershell
+.\tools\run_tap_teacher_mouse.ps1 -Seconds 10 -OutDir runs -Scrcpy "C:\Users\yuichi\Documents\tool\scrcpy-win64-v3.3.4\scrcpy.exe"
+```
+
+During capture, click inside the scrcpy window. Clicks are recorded in video frame coordinates.
+Playback is required for mouse capture; the window is shown by default. Use `--no-playback` (or `-NoPlayback` in the PowerShell runner) only when you want a hidden recording without click labels.
+Audio recording is always disabled (`--no-audio`).
+
+Outputs (created under `runs/run_YYYYmmdd_HHMMSS/`):
+
+```
+video.mp4
+taps.csv
+meta.json
+actions_tap.jsonl
+actions_tap_pos.jsonl
+debug_pos/
+```
+
 `build_state_role_dataset` joins hand frames and action events into state-role pairs:
 
 ```powershell
