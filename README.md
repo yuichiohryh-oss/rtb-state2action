@@ -241,6 +241,14 @@ metrics.jsonl
 model.pt
 ```
 
+### Position model inference (manifest)
+
+Run inference on a manifest and emit a prediction JSONL with summary metrics:
+
+```powershell
+.\tools\run_infer_pos.ps1 -Model runs\pos_train\mix_20260112\exp_001\model.pt -Manifest runs\pos_train\mix_20260112\val_all.jsonl -Out runs\pos_train\mix_20260112\pred_val.jsonl
+```
+
 ## Mouse-based tap teacher capture (Windows)
 
 Prereqs:
@@ -418,5 +426,6 @@ Notes:
 ## Testing
 
 ```powershell
-pytest
+pytest -q
+pytest -q tests/test_infer_pos_help.py
 ```
