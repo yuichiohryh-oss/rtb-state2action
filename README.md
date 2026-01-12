@@ -143,10 +143,11 @@ Label play positions from board diffs (`actions.jsonl` -> `actions_with_pos.json
 ```powershell
 cd repoRoot
 .\.venv\Scripts\Activate.ps1
-python .\tools\label_position_from_diff.py --video .\samples\batch3\hog_yt_2026-01-11_231410.mp4 --actions .\data\batch3_fps10_enforced\actions.jsonl --out .\data\batch3_fps10_enforced\actions_with_pos.jsonl --debug-dir .\data\batch3_fps10_enforced\pos_debug --dt-ms 300 --grid-w 18 --grid-h 11 --thr 25 --after-stability 2
+python .\tools\label_position_from_diff.py --video .\samples\batch3\hog_yt_2026-01-11_231410.mp4 --actions .\data\batch3_fps10_enforced\actions.jsonl --out .\data\batch3_fps10_enforced\actions_with_pos.jsonl --debug-dir .\data\batch3_fps10_enforced\pos_debug --dt-ms 300 --grid-w 18 --grid-h 11 --thr 18 --after-stability 3 --self-side-only --self-side-ratio 0.52 --component-score sum
 ```
 
 If `--roi` is omitted, an interactive ROI picker opens (use `--roi-pick-tms` to choose the frame time).
+If enemy-side overlays are being picked, keep `--self-side-only` enabled and adjust `--self-side-ratio` (defaults to 0.52).
 
 `build_state_role_dataset` joins hand frames and action events into state-role pairs:
 
