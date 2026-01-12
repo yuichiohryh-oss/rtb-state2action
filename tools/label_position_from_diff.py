@@ -353,6 +353,30 @@ def tap_sigma_px(args: argparse.Namespace, roi_w: int, roi_h: int) -> float:
     return max(10.0, sigma)
 
 
+def estimate_duration_ms(cap: cv2.VideoCapture) -> float | None:
+    frame_count = float(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = float(cap.get(cv2.CAP_PROP_FPS))
+    if frame_count <= 0 or fps <= 0:
+        return None
+    return frame_count / fps * 1000.0
+
+
+def null_pos(args: argparse.Namespace) -> dict:
+    return {
+        "cell_id": None,
+        "grid_w": args.grid_w,
+        "grid_h": args.grid_h,
+        "cx_roi": None,
+        "cy_roi": None,
+    }
+
+
+def log_skip(debug_dir: Path | None, idx: int, t_ms: int, reason: str) -> None:
+    if debug_dir is None:
+        return
+    print(f"skip idx={idx} t_ms={t_ms} reason={reason}")
+
+
 def apply_tap_prior(
     candidates: list[dict],
     tap_xy: Tuple[float, float],
@@ -394,6 +418,7 @@ def main() -> None:
         raise RuntimeError(f"Failed to open video: {args.video}")
 
     try:
+        duration_ms = estimate_duration_ms(cap)
         actions = read_actions(args.actions)
 
         if args.roi is None:
@@ -415,27 +440,49 @@ def main() -> None:
                 if "t_ms" not in action:
                     raise ValueError("Action missing t_ms field")
                 t_ms = int(action["t_ms"])
-                before_frame = get_frame_at(cap, t_ms - args.dt_ms)
-                before_roi = crop_roi(before_frame, roi)
+                before_t_ms = t_ms - args.dt_ms
+                max_after_t_ms = t_ms + args.dt_ms + max(0, args.after_stability - 1) * args.after_step_ms
+                if before_t_ms < 0:
+                    log_skip(args.debug_dir, idx, t_ms, "before_out_of_range")
+                    action_out = dict(action)
+                    action_out["pos"] = null_pos(args)
+                    handle.write(json.dumps(action_out, ensure_ascii=True) + "\n")
+                    continue
+                if duration_ms is not None and max_after_t_ms > duration_ms - 1:
+                    log_skip(args.debug_dir, idx, t_ms, "after_out_of_range")
+                    action_out = dict(action)
+                    action_out["pos"] = null_pos(args)
+                    handle.write(json.dumps(action_out, ensure_ascii=True) + "\n")
+                    continue
 
-                mask = None
-                diff_accum = None
-                after_roi = None
-                for after_t_ms in iterate_after_times(
-                    t_ms + args.dt_ms, args.after_stability, args.after_step_ms
-                ):
-                    after_frame = get_frame_at(cap, after_t_ms)
-                    after_roi = crop_roi(after_frame, roi)
-                    current_diff, current_mask = diff_mask(before_roi, after_roi, args.thr)
-                    if mask is None:
-                        mask = current_mask
-                        diff_accum = current_diff
-                    else:
-                        mask = cv2.bitwise_and(mask, current_mask)
-                        diff_accum = np.minimum(diff_accum, current_diff)
+                try:
+                    before_frame = get_frame_at(cap, before_t_ms)
+                    before_roi = crop_roi(before_frame, roi)
 
-                if mask is None or after_roi is None:
-                    raise RuntimeError("Failed to compute diff mask")
+                    mask = None
+                    diff_accum = None
+                    after_roi = None
+                    for after_t_ms in iterate_after_times(
+                        t_ms + args.dt_ms, args.after_stability, args.after_step_ms
+                    ):
+                        after_frame = get_frame_at(cap, after_t_ms)
+                        after_roi = crop_roi(after_frame, roi)
+                        current_diff, current_mask = diff_mask(before_roi, after_roi, args.thr)
+                        if mask is None:
+                            mask = current_mask
+                            diff_accum = current_diff
+                        else:
+                            mask = cv2.bitwise_and(mask, current_mask)
+                            diff_accum = np.minimum(diff_accum, current_diff)
+
+                    if mask is None or after_roi is None:
+                        raise RuntimeError("Failed to compute diff mask")
+                except RuntimeError:
+                    log_skip(args.debug_dir, idx, t_ms, "frame_read_failed")
+                    action_out = dict(action)
+                    action_out["pos"] = null_pos(args)
+                    handle.write(json.dumps(action_out, ensure_ascii=True) + "\n")
+                    continue
 
                 mask = refine_mask(mask)
                 components = compute_component_scores(
@@ -470,13 +517,7 @@ def main() -> None:
                 centroid = None if picked is None else picked["centroid"]
 
                 if centroid is None:
-                    pos = {
-                        "cell_id": None,
-                        "grid_w": args.grid_w,
-                        "grid_h": args.grid_h,
-                        "cx_roi": None,
-                        "cy_roi": None,
-                    }
+                    pos = null_pos(args)
                 else:
                     cx, cy = centroid
                     row, col = grid_cell(
