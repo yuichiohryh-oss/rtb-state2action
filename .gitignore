@@ -7,6 +7,7 @@ __pycache__/
 data/
 runs/
 samples/*.mp4
+samples/batch*/*.mp4
 *.log
 *.tmp
 *.DS_Store
