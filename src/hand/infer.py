@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import itertools
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -31,6 +33,8 @@ class InferConfig:
     roi_params: RoiParams = RoiParams()
     state_out: Path | None = None
     image_size: int = 96
+    enforce_unique_cards: bool = False
+    emit_slots: bool = False
 
 
 def _load_model(model_path: Path, device: torch.device):
@@ -71,6 +75,57 @@ def build_in_hand(slot_preds: List[int], class_names: List[str]) -> Dict[str, in
         if 0 <= idx < len(class_names):
             in_hand[class_names[idx]] = 1
     return in_hand
+
+
+def _resolve_card_class_indices(class_names: List[str]) -> List[int] | None:
+    indices: List[int] = []
+    for card_id in range(1, 9):
+        name = f"CARD_{card_id}"
+        try:
+            idx = class_names.index(name)
+        except ValueError:
+            return None
+        indices.append(idx)
+    if len(set(indices)) != 8:
+        return None
+    return indices
+
+
+def _select_unique_cards(
+    slot_probs: List[np.ndarray],
+    card_class_indices: List[int],
+    epsilon: float = 1e-9,
+) -> List[int] | None:
+    if len(slot_probs) != 4 or len(card_class_indices) != 8:
+        return None
+    best_score: float | None = None
+    best_assignment: List[int] | None = None
+    for perm in itertools.permutations(range(8), 4):
+        score = 0.0
+        for slot_idx, card_pos in enumerate(perm):
+            class_idx = card_class_indices[card_pos]
+            prob = float(slot_probs[slot_idx][class_idx])
+            score += math.log(max(prob, epsilon))
+        if best_score is None or score > best_score:
+            best_score = score
+            best_assignment = [card_class_indices[card_pos] for card_pos in perm]
+    return best_assignment
+
+
+def _slot_pred_to_card_id(pred_idx: int, class_names: List[str]) -> int:
+    if 0 <= pred_idx < len(class_names):
+        name = class_names[pred_idx]
+        if name.startswith("CARD_"):
+            suffix = name[5:]
+            if suffix.isdigit():
+                card_id = int(suffix)
+                if 1 <= card_id <= 8:
+                    return card_id
+    return 0
+
+
+def _build_slot_ids(slot_preds: List[int], class_names: List[str]) -> List[int]:
+    return [_slot_pred_to_card_id(pred_idx, class_names) for pred_idx in slot_preds]
 
 
 def _card_sort_key(name: str) -> Tuple[int, int | str]:
@@ -123,6 +178,7 @@ def infer_loop(config: InferConfig) -> None:
             _log_start(config, window_w, window_h)
             started = True
         slot_preds: List[int] = []
+        slot_probs: List[np.ndarray] = []
 
         for slot_idx, (x1, y1, x2, y2) in enumerate(frame_slots.slots):
             crop = frame_slots.frame[y1:y2, x1:x2]
@@ -130,15 +186,25 @@ def infer_loop(config: InferConfig) -> None:
             with torch.no_grad():
                 logits = model(tensor)
                 probs = torch.softmax(logits, dim=1).cpu().numpy()[0]
+            slot_probs.append(probs)
             pred_idx = int(np.argmax(probs))
             history[slot_idx].append((pred_idx, float(probs[pred_idx])))
             history[slot_idx] = history[slot_idx][-config.history :]
             stable = _stable_prediction(history[slot_idx], config.smoothing)
             slot_preds.append(stable)
 
+        if config.enforce_unique_cards:
+            card_class_indices = _resolve_card_class_indices(class_names)
+            if card_class_indices is not None:
+                enforced = _select_unique_cards(slot_probs, card_class_indices)
+                if enforced is not None:
+                    slot_preds = enforced
+
         in_hand = build_in_hand(slot_preds, class_names)
         ordered_in_hand = _order_in_hand(in_hand, class_names)
         state = {"t_ms": frame_slots.t_ms, "in_hand": ordered_in_hand}
+        if config.emit_slots:
+            state["slots"] = _build_slot_ids(slot_preds, class_names)
         if config.state_out is not None:
             append_state(config.state_out, state)
         print(json.dumps(state))

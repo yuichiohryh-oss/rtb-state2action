@@ -109,6 +109,14 @@ python -m scripts.infer_hand --window-title scrcpy_game --model runs/<run_id>/mo
 
 `Out-File` produces UTF-16LE by default; the extractor handles UTF-8/UTF-16LE inputs.
 
+Regenerate 231410 with slot enforcement and slot ids:
+
+```powershell
+cd repoRoot
+.\.venv\Scripts\Activate.ps1
+python -m scripts.infer_hand --video ... --video-fps 10 --model ... --enforce-unique-cards --emit-slots > out.hand.txt
+```
+
 `extract_actions_from_hand` converts the JSONL stream into action events:
 
 ```powershell
