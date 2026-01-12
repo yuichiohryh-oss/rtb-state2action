@@ -426,5 +426,6 @@ Notes:
 ## Testing
 
 ```powershell
-pytest
+pytest -q
+pytest -q tests/test_infer_pos_help.py
 ```
