@@ -496,18 +496,22 @@ def main() -> None:
 
                 if args.debug_dir is not None:
                     if tap_roi_xy is not None:
-                        best_before_str = (
-                            f"{best_before:.3f}" if best_before is not None else "n/a"
+                        def fmt(val: float | None, spec: str) -> str:
+                            return "n/a" if val is None else format(val, spec)
+
+                        sigma_txt = fmt(None if sigma_px is None else float(sigma_px), ".2f")
+                        best_before_str = fmt(
+                            None if best_before is None else float(best_before), ".3f"
                         )
-                        best_after_str = (
-                            f"{best_after:.3f}" if best_after is not None else "n/a"
+                        best_after_str = fmt(
+                            None if best_after is None else float(best_after), ".3f"
                         )
                         print(
                             "tap_prior"
                             f" idx={idx}"
                             f" t_ms={t_ms}"
                             f" tap=({tap_roi_xy[0]:.1f},{tap_roi_xy[1]:.1f})"
-                            f" sigma_px={sigma_px:.2f}"
+                            f" sigma_px={sigma_txt}"
                             f" best_before={best_before_str}"
                             f" best_after={best_after_str}"
                         )
