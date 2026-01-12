@@ -160,6 +160,12 @@ def train(config: TrainConfig) -> None:
         shuffle=True,
         num_workers=config.num_workers,
     )
+    train_eval_loader = DataLoader(
+        train_ds,
+        batch_size=config.batch_size,
+        shuffle=False,
+        num_workers=config.num_workers,
+    )
     val_loader = DataLoader(
         val_ds,
         batch_size=config.batch_size,
@@ -188,11 +194,11 @@ def train(config: TrainConfig) -> None:
     metrics_path = config.out_dir / "metrics.jsonl"
     best_top1 = -1.0
     best_path = config.out_dir / "model.pt"
+    train_sample_count = len(train_samples)
+    val_sample_count = len(val_samples)
 
     for epoch in range(1, config.epochs + 1):
         model.train()
-        train_loss = 0.0
-        count = 0
         for images, labels in train_loader:
             images = images.to(device)
             labels = labels.to(device)
@@ -201,19 +207,23 @@ def train(config: TrainConfig) -> None:
             loss = criterion(logits, labels)
             loss.backward()
             optimizer.step()
-            batch = labels.size(0)
-            train_loss += loss.item() * batch
-            count += batch
 
+        train_metrics = evaluate(model, train_eval_loader, criterion, device, config.grid_w)
         val_metrics = evaluate(model, val_loader, criterion, device, config.grid_w)
         epoch_metrics = {
             "epoch": epoch,
-            "train_loss": train_loss / max(1, count),
+            "train_loss": train_metrics["loss"],
+            "train_top1": train_metrics["top1"],
+            "train_top3": train_metrics["top3"],
+            "train_mean_manhattan": train_metrics["mean_manhattan"],
+            "train_count": train_metrics["count"],
             "val_loss": val_metrics["loss"],
             "val_top1": val_metrics["top1"],
             "val_top3": val_metrics["top3"],
             "val_mean_manhattan": val_metrics["mean_manhattan"],
             "val_count": val_metrics["count"],
+            "train_samples": train_sample_count,
+            "val_samples": val_sample_count,
         }
         with metrics_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(epoch_metrics, ensure_ascii=True) + "\n")

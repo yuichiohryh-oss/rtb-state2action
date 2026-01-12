@@ -194,12 +194,24 @@ python tools\build_pos_dataset.py ^
   --min-conf 0.7
 ```
 
+Build train/val manifests with a deterministic split:
+
+```powershell
+python tools\build_pos_dataset.py ^
+  --input runs\smoke\actions_tap_pos.jsonl ^
+  --out-train data\pos\smoke_train.jsonl ^
+  --out-val data\pos\smoke_val.jsonl ^
+  --val-ratio 0.1 ^
+  --seed 42 ^
+  --min-conf 0.7
+```
+
 Train the model:
 
 ```powershell
 python train_pos_model.py ^
-  --train-manifest data\pos\smoke_manifest.jsonl ^
-  --val-manifest data\pos\smoke_manifest.jsonl ^
+  --train-manifest data\pos\smoke_train.jsonl ^
+  --val-manifest data\pos\smoke_val.jsonl ^
   --grid-w 18 --grid-h 11 ^
   --img-size 224 ^
   --batch-size 32 ^
@@ -211,12 +223,13 @@ python train_pos_model.py ^
 PowerShell runner (builds manifest then trains):
 
 ```powershell
-.\tools\run_train_pos.ps1 -InputJsonl runs\smoke\actions_tap_pos.jsonl -OutDir runs\pos_train\smoke -Epochs 5
+.\tools\run_train_pos.ps1 -InputJsonl runs\smoke\actions_tap_pos.jsonl -OutDir runs\pos_train\smoke -Epochs 5 -ValRatio 0.1 -Seed 42
 ```
 
 If the manifest has 0 samples:
 - Rows with `pos.cell_id` set to null are skipped.
 - Provide `--debug-dir` (or `-DebugDir`) when `paths.diff` is missing so diff images can be resolved.
+ - If the split produces 0 train or 0 val samples, increase `-ValRatio` or lower `-MinConf`.
 
 Outputs:
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +12,12 @@ def build_parser() -> argparse.ArgumentParser:
         description="Build a manifest JSONL for position classification training."
     )
     parser.add_argument("--input", required=True, type=Path, help="actions_tap_pos.jsonl")
-    parser.add_argument("--out", required=True, type=Path, help="manifest.jsonl output path")
+    parser.add_argument("--out", type=Path, help="manifest.jsonl output path")
+    parser.add_argument("--out-train", type=Path, help="train manifest JSONL path")
+    parser.add_argument("--out-val", type=Path, help="val manifest JSONL path")
+    parser.add_argument("--val-ratio", type=float, default=0.1)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--max-samples", type=int, default=0)
     parser.add_argument("--min-conf", type=float, default=0.7)
     parser.add_argument("--grid-w", type=int, default=18)
     parser.add_argument("--grid-h", type=int, default=11)
@@ -34,8 +40,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if not args.input.exists():
         parser.error(f"--input not found: {args.input}")
+    if args.out_train is not None or args.out_val is not None:
+        if args.out_train is None or args.out_val is None:
+            parser.error("--out-train and --out-val must be provided together")
+    if args.out is None and args.out_train is None:
+        parser.error("Specify --out or both --out-train/--out-val")
     if args.min_conf < 0:
         parser.error("--min-conf must be non-negative")
+    if not 0.0 <= args.val_ratio < 1.0:
+        parser.error("--val-ratio must be in [0.0, 1.0)")
+    if args.max_samples < 0:
+        parser.error("--max-samples must be >= 0")
     if args.grid_w <= 0 or args.grid_h <= 0:
         parser.error("--grid-w/--grid-h must be positive")
     return args
@@ -146,6 +161,31 @@ def pick_diff_path(
     return resolve_diff_from_debug(debug_dir, t_ms, prefer_diff)
 
 
+def shuffle_samples(
+    samples: list[dict[str, Any]], seed: int | None, max_samples: int
+) -> list[dict[str, Any]]:
+    rng = random.Random(seed)
+    rng.shuffle(samples)
+    if max_samples > 0:
+        return samples[:max_samples]
+    return samples
+
+
+def split_samples(
+    samples: list[dict[str, Any]], val_ratio: float
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    split_idx = int(round(len(samples) * (1.0 - val_ratio)))
+    split_idx = max(0, min(len(samples), split_idx))
+    return samples[:split_idx], samples[split_idx:]
+
+
+def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, ensure_ascii=True) + "\n")
+
+
 def main() -> None:
     args = parse_args()
     actions, total_lines, bad_json = read_jsonl(args.input)
@@ -208,18 +248,35 @@ def main() -> None:
             out_row["t_ms"] = int(t_ms)
         out_rows.append(out_row)
 
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    with args.out.open("w", encoding="utf-8") as handle:
-        for row in out_rows:
-            handle.write(json.dumps(row, ensure_ascii=True) + "\n")
+    train_rows: list[dict[str, Any]] = []
+    val_rows: list[dict[str, Any]] = []
+    if args.out_train is not None and args.out_val is not None:
+        out_rows = shuffle_samples(out_rows, args.seed, args.max_samples)
+        train_rows, val_rows = split_samples(out_rows, args.val_ratio)
+        write_jsonl(args.out_train, train_rows)
+        write_jsonl(args.out_val, val_rows)
+    elif args.out is not None:
+        if args.max_samples > 0:
+            out_rows = out_rows[: args.max_samples]
+        write_jsonl(args.out, out_rows)
 
     total_skipped = sum(skip_counts.values())
     print(f"input_rows={total_lines}")
-    print(f"written={len(out_rows)}")
+    if args.out_train is not None and args.out_val is not None:
+        print(f"train_written={len(train_rows)}")
+        print(f"val_written={len(val_rows)}")
+    else:
+        print(f"written={len(out_rows)}")
     print(f"skipped={total_skipped}")
     print("skip_breakdown=" + json.dumps(skip_counts, ensure_ascii=True))
-    print(f"written>0={len(out_rows) > 0}")
-    print(f"out={args.out}")
+    if args.out_train is not None and args.out_val is not None:
+        print(f"train_written>0={len(train_rows) > 0}")
+        print(f"val_written>0={len(val_rows) > 0}")
+        print(f"out_train={args.out_train}")
+        print(f"out_val={args.out_val}")
+    else:
+        print(f"written>0={len(out_rows) > 0}")
+        print(f"out={args.out}")
 
 
 if __name__ == "__main__":
