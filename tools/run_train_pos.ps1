@@ -77,16 +77,21 @@ python @buildArgs
 $trainCount = Get-LineCount -Path $trainManifestPath
 $valCount = Get-LineCount -Path $valManifestPath
 Write-Host ("train_samples={0} val_samples={1}" -f $trainCount, $valCount)
-if ($trainCount -eq 0 -or $valCount -eq 0) {
-  Write-Error ("Train/val manifest is empty (train={0}, val={1}). Check -ValRatio/-MinConf/-DebugDir." -f $trainCount, $valCount)
+if ($trainCount -eq 0) {
+  Write-Error ("Train manifest is empty (train={0}). Check -ValRatio/-MinConf/-DebugDir." -f $trainCount)
   exit 1
+}
+$valManifestPathForTrain = $valManifestPath
+if ($valCount -eq 0) {
+  Write-Warning ("Val manifest is empty (val={0}). Falling back to train manifest for validation." -f $valCount)
+  $valManifestPathForTrain = $trainManifestPath
 }
 
 Write-Host ""
 Write-Host "=== train position model ==="
 python train_pos_model.py `
   --train-manifest $trainManifestPath `
-  --val-manifest $valManifestPath `
+  --val-manifest $valManifestPathForTrain `
   --grid-w $GridW `
   --grid-h $GridH `
   --img-size $ImgSize `

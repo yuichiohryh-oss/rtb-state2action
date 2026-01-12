@@ -229,7 +229,9 @@ PowerShell runner (builds manifest then trains):
 If the manifest has 0 samples:
 - Rows with `pos.cell_id` set to null are skipped.
 - Provide `--debug-dir` (or `-DebugDir`) when `paths.diff` is missing so diff images can be resolved.
- - If the split produces 0 train or 0 val samples, increase `-ValRatio` or lower `-MinConf`.
+- If the split produces 0 train or 0 val samples, increase `-ValRatio` or lower `-MinConf`.
+
+When the dataset is very small, the val split can be empty even with a non-zero `-ValRatio`. In that case, add more samples or lower `-ValRatio` to keep evaluation meaningful.
 
 Outputs:
 

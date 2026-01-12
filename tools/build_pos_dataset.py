@@ -174,8 +174,10 @@ def shuffle_samples(
 def split_samples(
     samples: list[dict[str, Any]], val_ratio: float
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    if len(samples) < 2:
+        return samples, []
     split_idx = int(round(len(samples) * (1.0 - val_ratio)))
-    split_idx = max(0, min(len(samples), split_idx))
+    split_idx = max(1, min(len(samples), split_idx))
     return samples[:split_idx], samples[split_idx:]
 
 
@@ -263,8 +265,12 @@ def main() -> None:
     total_skipped = sum(skip_counts.values())
     print(f"input_rows={total_lines}")
     if args.out_train is not None and args.out_val is not None:
+        print(f"train_count={len(train_rows)}")
+        print(f"val_count={len(val_rows)}")
         print(f"train_written={len(train_rows)}")
         print(f"val_written={len(val_rows)}")
+        if len(val_rows) == 0:
+            print("WARNING: val split is empty; increase dataset or adjust val_ratio")
     else:
         print(f"written={len(out_rows)}")
     print(f"skipped={total_skipped}")
