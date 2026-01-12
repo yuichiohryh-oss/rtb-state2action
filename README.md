@@ -161,6 +161,15 @@ One command capture + label:
 powershell -ExecutionPolicy Bypass -File tools/run_tap_teacher.ps1 -Seconds 180 -OutDir runs
 ```
 
+If `adb` / `scrcpy` are not on PATH, pass `-Adb` / `-Scrcpy` with full paths:
+
+```powershell
+.\tools\run_tap_teacher.ps1 `
+  -Seconds 180 `
+  -OutDir runs `
+  -Scrcpy "C:\Users\...\scrcpy.exe"
+```
+
 Outputs (created under `runs/<run_id>/`):
 
 ```

@@ -5,6 +5,7 @@ import csv
 import json
 import re
 import signal
+import shutil
 import subprocess
 import sys
 import threading
@@ -48,6 +49,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--record-seconds", type=int, default=180, help="Recording duration in seconds."
     )
     parser.add_argument("--serial", type=str, default=None, help="adb device serial.")
+    parser.add_argument(
+        "--adb",
+        type=str,
+        default="adb",
+        help="Path to adb executable (default: adb)",
+    )
+    parser.add_argument(
+        "--scrcpy",
+        type=str,
+        default="scrcpy",
+        help="Path to scrcpy executable (default: scrcpy)",
+    )
     return parser
 
 
@@ -214,8 +227,27 @@ def stop_process(proc: subprocess.Popen, name: str) -> None:
         proc.kill()
 
 
+def resolve_executable(path_value: str) -> str | None:
+    found = shutil.which(path_value)
+    if found:
+        return found
+    candidate = Path(path_value)
+    if candidate.is_file():
+        return str(candidate)
+    return None
+
+
 def main() -> None:
     args = parse_args()
+
+    adb_path = resolve_executable(args.adb)
+    if adb_path is None:
+        print("ERROR: adb executable not found:", args.adb)
+        sys.exit(2)
+    scrcpy_path = resolve_executable(args.scrcpy)
+    if scrcpy_path is None:
+        print("ERROR: scrcpy executable not found:", args.scrcpy)
+        sys.exit(2)
 
     out_dir = args.out
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -223,7 +255,7 @@ def main() -> None:
     taps_path = out_dir / "taps.csv"
     meta_path = out_dir / "meta.json"
 
-    adb_args = ["adb"]
+    adb_args = [adb_path]
     if args.serial:
         adb_args += ["-s", args.serial]
 
@@ -240,7 +272,7 @@ def main() -> None:
     )
 
     scrcpy_cmd = [
-        "scrcpy",
+        scrcpy_path,
         "--record",
         str(video_path),
         "--no-playback",
@@ -356,6 +388,8 @@ def main() -> None:
         "raw_max_y": raw_max_y,
         "raw_scale_source": raw_max_source or "raw_as_device",
         "raw_scale_note": "x/y are scaled to device coordinates.",
+        "adb_path": adb_path,
+        "scrcpy_path": scrcpy_path,
     }
     with meta_path.open("w", encoding="utf-8") as handle:
         json.dump(meta, handle, ensure_ascii=True, indent=2)

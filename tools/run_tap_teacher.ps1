@@ -5,6 +5,10 @@ param(
 
   [string]$Serial = "",
 
+  [string]$Adb = "",
+
+  [string]$Scrcpy = "",
+
   [string]$VenvPath = ".\\.venv\\Scripts\\Activate.ps1",
 
   [string[]]$LabelArgs = @()
@@ -36,6 +40,8 @@ Write-Host ""
 
 $captureArgs = @("--out", $runDir, "--record-seconds", $Seconds)
 if ($Serial) { $captureArgs += @("--serial", $Serial) }
+if ($Adb) { $captureArgs += @("--adb", $Adb) }
+if ($Scrcpy) { $captureArgs += @("--scrcpy", $Scrcpy) }
 python tools/capture_scrcpy_taps.py @captureArgs
 
 $tapsCsv = Join-Path $runDir "taps.csv"

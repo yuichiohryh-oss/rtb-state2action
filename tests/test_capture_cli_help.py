@@ -15,3 +15,5 @@ def test_capture_scrcpy_taps_help() -> None:
         text=True,
     )
     assert result.returncode == 0
+    assert "--adb" in result.stdout
+    assert "--scrcpy" in result.stdout
