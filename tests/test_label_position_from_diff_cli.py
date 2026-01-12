@@ -15,3 +15,26 @@ def test_label_position_from_diff_help() -> None:
         text=True,
     )
     assert result.returncode == 0
+
+
+def test_label_position_from_diff_help_with_new_args() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    script = repo_root / "tools" / "label_position_from_diff.py"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--self-side-only",
+            "--self-side-ratio",
+            "0.52",
+            "--component-score",
+            "sum",
+            "--debug-topn",
+            "5",
+            "--help",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0

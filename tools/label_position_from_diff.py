@@ -39,7 +39,31 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--after-step-ms", type=int, default=100)
     parser.add_argument("--min-area", type=int, default=50)
     parser.add_argument("--max-area", type=int, default=0)
+    parser.add_argument(
+        "--self-side-only",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Limit candidates to the self-side (below the river).",
+    )
+    parser.add_argument(
+        "--self-side-ratio",
+        type=float,
+        default=0.52,
+        help="Self-side cutoff as a ratio of ROI height (cy >= H * ratio).",
+    )
+    parser.add_argument(
+        "--component-score",
+        choices=("area", "sum", "meanxarea"),
+        default="sum",
+        help="Score used to pick a component.",
+    )
     parser.add_argument("--debug-dir", type=Path, default=None)
+    parser.add_argument(
+        "--debug-topn",
+        type=int,
+        default=0,
+        help="Draw top-N candidate component boxes/scores in debug output.",
+    )
     return parser
 
 
@@ -58,6 +82,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--after-step-ms must be non-negative")
     if args.min_area < 0 or args.max_area < 0:
         parser.error("--min-area/--max-area must be non-negative")
+    if not (0.0 <= args.self_side_ratio <= 1.0):
+        parser.error("--self-side-ratio must be between 0 and 1")
+    if args.debug_topn < 0:
+        parser.error("--debug-topn must be non-negative")
     return args
 
 
@@ -88,14 +116,14 @@ def crop_roi(frame: np.ndarray, roi: Tuple[int, int, int, int]) -> np.ndarray:
     return frame[y : y + h, x : x + w]
 
 
-def diff_mask(before: np.ndarray, after: np.ndarray, thr: int) -> np.ndarray:
+def diff_mask(before: np.ndarray, after: np.ndarray, thr: int) -> tuple[np.ndarray, np.ndarray]:
     before_gray = cv2.cvtColor(before, cv2.COLOR_BGR2GRAY)
     after_gray = cv2.cvtColor(after, cv2.COLOR_BGR2GRAY)
     before_blur = cv2.GaussianBlur(before_gray, (5, 5), 0)
     after_blur = cv2.GaussianBlur(after_gray, (5, 5), 0)
     diff = cv2.absdiff(after_blur, before_blur)
     _, mask = cv2.threshold(diff, thr, 255, cv2.THRESH_BINARY)
-    return mask
+    return diff, mask
 
 
 def refine_mask(mask: np.ndarray) -> np.ndarray:
@@ -105,24 +133,60 @@ def refine_mask(mask: np.ndarray) -> np.ndarray:
     return cleaned
 
 
-def find_centroid(
-    mask: np.ndarray, min_area: int, max_area: int
-) -> Tuple[float, float] | None:
-    num_labels, _, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
-    best = None
-    best_area = -1
+def compute_component_scores(
+    mask: np.ndarray,
+    diff: np.ndarray,
+    min_area: int,
+    max_area: int,
+    score_mode: str,
+) -> list[dict]:
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
+        mask, connectivity=8
+    )
+    sums = np.bincount(
+        labels.ravel(),
+        weights=diff.astype(np.float32).ravel(),
+        minlength=num_labels,
+    )
+    components: list[dict] = []
     for label in range(1, num_labels):
         area = int(stats[label, cv2.CC_STAT_AREA])
         if area < min_area:
             continue
         if max_area > 0 and area > max_area:
             continue
-        if area > best_area:
-            best_area = area
-            best = centroids[label]
-    if best is None:
+        if score_mode == "area":
+            score = float(area)
+        else:
+            score = float(sums[label])
+        x = int(stats[label, cv2.CC_STAT_LEFT])
+        y = int(stats[label, cv2.CC_STAT_TOP])
+        w = int(stats[label, cv2.CC_STAT_WIDTH])
+        h = int(stats[label, cv2.CC_STAT_HEIGHT])
+        cx, cy = centroids[label]
+        components.append(
+            {
+                "label": label,
+                "area": area,
+                "score": score,
+                "bbox": (x, y, w, h),
+                "centroid": (float(cx), float(cy)),
+            }
+        )
+    return components
+
+
+def filter_self_side(
+    components: list[dict], roi_h: int, self_side_ratio: float
+) -> list[dict]:
+    cutoff = roi_h * self_side_ratio
+    return [comp for comp in components if comp["centroid"][1] >= cutoff]
+
+
+def pick_component(components: list[dict]) -> dict | None:
+    if not components:
         return None
-    return float(best[0]), float(best[1])
+    return max(components, key=lambda comp: (comp["score"], comp["area"]))
 
 
 def grid_cell(
@@ -165,6 +229,8 @@ def draw_debug_image(
     after_roi: np.ndarray,
     mask: np.ndarray,
     centroid: Tuple[float, float] | None,
+    candidates: list[dict] | None,
+    debug_topn: int,
     grid_w: int,
     grid_h: int,
 ) -> None:
@@ -179,6 +245,24 @@ def draw_debug_image(
     if centroid is not None:
         cx, cy = centroid
         cv2.circle(canvas, (int(cx), int(cy)), 6, (0, 0, 255), -1)
+
+    if candidates and debug_topn > 0:
+        for comp in sorted(candidates, key=lambda item: item["score"], reverse=True)[
+            :debug_topn
+        ]:
+            x, y, w, h = comp["bbox"]
+            cv2.rectangle(canvas, (x, y), (x + w, y + h), (255, 200, 0), 1)
+            label = f"{comp['score']:.1f}"
+            cv2.putText(
+                canvas,
+                label,
+                (x, max(10, y - 4)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.4,
+                (255, 200, 0),
+                1,
+                cv2.LINE_AA,
+            )
 
     thumb_w = max(50, roi_w // 4)
     thumb_h = max(50, roi_h // 4)
@@ -227,20 +311,35 @@ def main() -> None:
                 before_roi = crop_roi(before_frame, roi)
 
                 mask = None
+                diff_accum = None
                 after_roi = None
                 for after_t_ms in iterate_after_times(
                     t_ms + args.dt_ms, args.after_stability, args.after_step_ms
                 ):
                     after_frame = get_frame_at(cap, after_t_ms)
                     after_roi = crop_roi(after_frame, roi)
-                    current_mask = diff_mask(before_roi, after_roi, args.thr)
-                    mask = current_mask if mask is None else cv2.bitwise_and(mask, current_mask)
+                    current_diff, current_mask = diff_mask(before_roi, after_roi, args.thr)
+                    if mask is None:
+                        mask = current_mask
+                        diff_accum = current_diff
+                    else:
+                        mask = cv2.bitwise_and(mask, current_mask)
+                        diff_accum = np.minimum(diff_accum, current_diff)
 
                 if mask is None or after_roi is None:
                     raise RuntimeError("Failed to compute diff mask")
 
                 mask = refine_mask(mask)
-                centroid = find_centroid(mask, args.min_area, args.max_area)
+                components = compute_component_scores(
+                    mask, diff_accum, args.min_area, args.max_area, args.component_score
+                )
+                candidates = components
+                if args.self_side_only:
+                    filtered = filter_self_side(components, mask.shape[0], args.self_side_ratio)
+                    if filtered:
+                        candidates = filtered
+                picked = pick_component(candidates)
+                centroid = None if picked is None else picked["centroid"]
 
                 if centroid is None:
                     pos = {
@@ -271,7 +370,14 @@ def main() -> None:
                     name = f"{idx:04d}_t{t_ms}.jpg"
                     debug_path = args.debug_dir / name
                     draw_debug_image(
-                        debug_path, after_roi, mask, centroid, args.grid_w, args.grid_h
+                        debug_path,
+                        after_roi,
+                        mask,
+                        centroid,
+                        candidates,
+                        args.debug_topn,
+                        args.grid_w,
+                        args.grid_h,
                     )
     finally:
         cap.release()
