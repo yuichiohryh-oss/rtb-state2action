@@ -48,14 +48,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-playback",
         dest="no_playback",
         action="store_true",
-        default=True,
-        help="Disable scrcpy playback window (default: true).",
-    )
-    parser.add_argument(
-        "--playback",
-        dest="no_playback",
-        action="store_false",
-        help="Enable scrcpy playback window.",
+        default=False,
+        help="Disable scrcpy playback window.",
     )
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging.")
     return parser

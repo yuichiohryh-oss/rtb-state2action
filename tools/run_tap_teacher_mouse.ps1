@@ -11,6 +11,8 @@ param(
 
   [int]$DtMs = 300,
 
+  [switch]$NoPlayback,
+
   [switch]$Verbose
 )
 
@@ -34,7 +36,7 @@ Write-Host ""
 
 $captureArgs = @("--out", $runDir, "--record-seconds", $Seconds)
 if ($Scrcpy) { $captureArgs += @("--scrcpy", $Scrcpy) }
-$captureArgs += "--playback"
+if ($NoPlayback) { $captureArgs += "--no-playback" }
 if ($Verbose) { $captureArgs += "--verbose" }
 python tools/capture_scrcpy_mouse.py @captureArgs
 if ($LASTEXITCODE -ne 0) { throw "capture_scrcpy_mouse.py failed with exit code $LASTEXITCODE" }

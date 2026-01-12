@@ -194,6 +194,7 @@ Run the end-to-end pipeline (record + clicks + diff labeling):
 ```
 
 During capture, click inside the scrcpy window. Clicks are recorded in video frame coordinates.
+Playback is required for mouse capture; the window is shown by default. Use `--no-playback` (or `-NoPlayback` in the PowerShell runner) only when you want a hidden recording without click labels.
 Audio recording is always disabled (`--no-audio`).
 
 Outputs (created under `runs/run_YYYYmmdd_HHMMSS/`):
