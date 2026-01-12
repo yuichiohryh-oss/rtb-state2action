@@ -18,7 +18,7 @@ param(
 
   [switch]$IncludePrevAction = $true,
 
-  [string]$InferArgs = ""
+  [string[]]$InferArgs = @()
 )
 
 Set-StrictMode -Version Latest
@@ -55,18 +55,6 @@ Write-Host "outDir:   $OutDir"
 Write-Host ""
 
 # 1) infer_hand (UTF-8 output)
-$extraInferArgs = @()
-if ($InferArgs -and $InferArgs.Trim()) {
-  $pattern = '("([^"\\]|\\.)*"|''([^''\\]|\\.)*''|\S+)'
-  foreach ($m in [regex]::Matches($InferArgs, $pattern)) {
-    $arg = $m.Value
-    if (($arg.StartsWith('"') -and $arg.EndsWith('"')) -or ($arg.StartsWith("'") -and $arg.EndsWith("'"))) {
-      $arg = $arg.Substring(1, $arg.Length - 2)
-    }
-    if ($arg) { $extraInferArgs += $arg }
-  }
-}
-
 $inferHandArgs = @(
   "--video", $videoPath,
   "--video-fps", $Fps,
@@ -76,7 +64,7 @@ $inferHandArgs = @(
   "--x-margin-ratio", $x_margin_ratio,
   "--x-offset-ratio", $x_offset_ratio
 )
-if ($extraInferArgs.Count -gt 0) { $inferHandArgs += $extraInferArgs }
+if ($InferArgs.Count -gt 0) { $inferHandArgs += $InferArgs }
 
 python -m scripts.infer_hand @inferHandArgs | Out-File -FilePath $hand -Encoding utf8
 
