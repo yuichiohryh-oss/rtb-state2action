@@ -149,6 +149,29 @@ python .\tools\label_position_from_diff.py --video .\samples\batch3\hog_yt_2026-
 If `--roi` is omitted, an interactive ROI picker opens (use `--roi-pick-tms` to choose the frame time).
 If enemy-side overlays are being picked, keep `--self-side-only` enabled and adjust `--self-side-ratio` (defaults to 0.52).
 
+## Tap teacher pipeline
+
+Prereqs:
+- `adb` and `scrcpy` available in PATH
+- USB debugging enabled on the device
+
+One command capture + label:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/run_tap_teacher.ps1 -Seconds 180 -OutDir runs
+```
+
+Outputs (created under `runs/<run_id>/`):
+
+```
+video.mp4
+taps.csv
+meta.json
+actions_tap.jsonl
+actions_tap_pos.jsonl
+debug_pos/
+```
+
 `build_state_role_dataset` joins hand frames and action events into state-role pairs:
 
 ```powershell
